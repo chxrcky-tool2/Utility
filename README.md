@@ -22,3 +22,9 @@
 
 * **🕒 Timeline Execution:** Active runtime sequences may experience unexpected premature interruptions during operation.
 * **🕒 Clock Synchronization:** The time-stepping module currently fails to generate authentic real-time tick frequencies, remaining capped at a 240Hz baseline. A structural rewrite is scheduled for the next deployment cycle.
+
+
+---
+### 💬 Community & Support
+Join the official ChxrCky Discord server to report bugs, suggest features, or chat with the community!
+👉 **[Click here to join the Discord](https://discord.gg/Bm8pYsmpDR)**
