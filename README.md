@@ -16,3 +16,12 @@
 ### Fixed
 *   **Checkpoint State Desync (Critical):** Resolved a major engine bug where recording from a checkpoint past input index 114 would cause the sequence cursor to incorrectly regress to 113, resulting in severe macro corruption. Input logging above index 114 is now fully stable.
 *   **Audio Playback Interruption (Critical):** Resolved an engine anomaly where utilizing the Checkpoint State Allocator (StartPos switcher) would inadvertently halt the background music track. The audio engine now correctly resumes and maintains playback upon state transition.
+
+
+### 🐛 KNOWN BUGS AND ERRORS
+
+**Timeline Execution**
+* Resolved an unexpected sequence interruption that occurred during active runtime.
+
+**Clock Synchronization**
+* Corrected a discrepancy in the time-stepping module. The current simulation cap is locked at 240Hz; a structural rewrite to enable authentic real-time tick frequencies is scheduled for next week.
