@@ -1,5 +1,5 @@
-### 🧾 [1.0.2-RELEASE] 
-
+### 🧾 [1.0.2] 
+# (Not released yet, due to bugs and errors.)
 ### Added
 *   **Real-Time Temporal Step Decoupling:** The TPS override system now dynamically synchronizes with the engine in real-time. Modifying the target tick rate (e.g., adjusting to 1440) will instantly apply the new physics calculation rate without requiring a level restart.
 *   **StartPos Toggle Integration:** Added a new configuration toggle for the Checkpoint State Allocator directly within the `Display` configuration tab for quicker access.
