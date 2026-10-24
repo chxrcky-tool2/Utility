@@ -1,10 +1,10 @@
-#include "cky.hpp"
+#include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 
 class $modify(CkyAutoClickHook, PlayLayer) {
     void update(float dt) {
         PlayLayer::update(dt);
-        if (cky::autoClicker && !cky::frozen && PlayLayer::get()) {
+        if (cky::autoClicker && PlayLayer::get()) {
             float interval = 1.0f / cky::autoClickerCps;
             cky::clickAccumulator += dt;
             while (cky::clickAccumulator >= interval) {
