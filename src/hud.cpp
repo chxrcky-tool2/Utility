@@ -13,12 +13,12 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-hud");
-        // Moved position to align nicely inside the box
-        this->setPosition({50.f, 280.f});
+        
+        // Moved inside the top of the brown box
+        this->setPosition({130.f, 270.f});
 
         m_label = cocos2d::CCLabelBMFont::create("0 / 0 / 0", "bigFont.fnt");
         m_label->setScale(0.4f);
-        // Changed anchor point so it centers the text
         m_label->setAnchorPoint({0.5f, 0.5f});
         this->addChild(m_label);
         return true;
