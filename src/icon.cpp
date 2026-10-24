@@ -15,26 +15,28 @@ public:
         if (!CCNode::init()) return false;
         this->setID("cky-icon");
         
-        // Use the clean hamburger menu icon instead of the checkerboard
-        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_menuBtn_001.png");
-        if (!spr) return false;
-        
-        spr->setScale(0.8f);
+        // Use the clean Edit button so it doesn't glitch
+        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
+        if (!spr) spr = cocos2d::CCSprite::create("GJ_button_01.png");
         
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyIcon::onClick));
-        if (!btn) return false;
-
         auto menu = cocos2d::CCMenu::create();
-        if (menu) {
-            menu->setPosition({0.f, 0.f});
-            menu->addChild(btn);
-            this->addChild(menu);
-        }
+        menu->addChild(btn);
+        this->addChild(menu);
         return true;
     }
 
     void onClick(cocos2d::CCObject*) {
-        geode::log::info("Cky Icon Clicked!");
+        // Toggle the panel visibility
+        auto parentLayer = this->getParent();
+        if (!parentLayer) return;
+        
+        auto panel = parentLayer->getChildByID("cky-panel");
+        if (panel) {
+            panel->removeFromParent(); // If it's open, close it
+        } else {
+            cky::ckyOpenPanel(parentLayer); // If it's closed, open it
+        }
     }
 };
 
