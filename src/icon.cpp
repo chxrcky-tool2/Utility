@@ -15,24 +15,21 @@ public:
         if (!CCNode::init()) return false;
         this->setID("cky-icon");
         
-        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_roundButton_001.png");
-        if (!spr) spr = cocos2d::CCSprite::create("GJ_button_01.png");
+        // Use the clean hamburger menu icon instead of the checkerboard
+        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_menuBtn_001.png");
         if (!spr) return false;
-
-        spr->setScale(1.0f);
         
-        // Create the button
+        spr->setScale(0.8f);
+        
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyIcon::onClick));
         if (!btn) return false;
 
-        // Create the menu FIRST without items, then add the button
         auto menu = cocos2d::CCMenu::create();
         if (menu) {
             menu->setPosition({0.f, 0.f});
-            menu->addChild(btn); // Add the button after menu creation
+            menu->addChild(btn);
             this->addChild(menu);
         }
-        
         return true;
     }
 
@@ -47,7 +44,6 @@ class $modify(CkyMenuLayer, MenuLayer) {
         this->scheduleOnce(schedule_selector(CkyMenuLayer::addCkyIcon), 0.5f);
         return true;
     }
-
     void addCkyIcon(float) {
         if (auto icon = CkyIcon::create()) {
             icon->setPosition({40.f, 40.f});
@@ -61,7 +57,6 @@ class $modify(CkyPauseLayer, PauseLayer) {
         PauseLayer::customSetup();
         this->scheduleOnce(schedule_selector(CkyPauseLayer::addCkyPauseIcon), 0.5f);
     }
-
     void addCkyPauseIcon(float) {
         if (auto icon = CkyIcon::create()) {
             auto winSize = cocos2d::CCDirector::get()->getWinSize();
