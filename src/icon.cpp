@@ -1,9 +1,38 @@
 #include "state.hpp"
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
-#include <Amber.hpp>
+#include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 
-using namespace amber;
+class CkyFloatingButton : public cocos2d::CCNode {
+public:
+    static CkyFloatingButton* create() {
+        auto ret = new CkyFloatingButton();
+        if (ret && ret->init()) { ret->autorelease(); return ret; }
+        CC_SAFE_DELETE(ret); return nullptr;
+    }
+
+    bool init() override {
+        if (!CCNode::init()) return false;
+        this->setID("cky-floating-btn");
+
+        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
+        if (!spr) spr = cocos2d::CCSprite::create("GJ_button_01.png");
+        
+        if (spr) {
+            spr->setScale(1.1f);
+            auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyFloatingButton::onClick));
+            auto menu = cocos2d::CCMenu::create(btn);
+            menu->setPosition({0.f, 0.f});
+            this->addChild(menu);
+        }
+        return true;
+    }
+
+    void onClick(cocos2d::CCObject*) {
+        auto parent = this->getParent();
+        if (parent) cky::ckyOpenPanel(parent);
+    }
+};
 
 class $modify(CkyMenuLayer, MenuLayer) {
     bool init() {
@@ -13,15 +42,7 @@ class $modify(CkyMenuLayer, MenuLayer) {
     }
     
     void addFloatingButton(float) {
-        auto spr = CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
-        if (!spr) return;
-        
-        auto btn = DraggableButton::create(spr, [](CCObject* sender) {
-            auto parent = static_cast<CCNode*>(sender)->getParent();
-            if (parent) cky::ckyOpenPanel(parent);
-        });
-        
-        if (btn) {
+        if (auto btn = CkyFloatingButton::create()) {
             btn->setPosition({40.f, 80.f});
             this->addChild(btn, 100);
         }
@@ -35,16 +56,8 @@ class $modify(CkyPauseLayer, PauseLayer) {
     }
     
     void addFloatingButton(float) {
-        auto spr = CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
-        if (!spr) return;
-        
-        auto btn = DraggableButton::create(spr, [](CCObject* sender) {
-            auto parent = static_cast<CCNode*>(sender)->getParent();
-            if (parent) cky::ckyOpenPanel(parent);
-        });
-        
-        if (btn) {
-            auto winSize = CCDirector::get()->getWinSize();
+        if (auto btn = CkyFloatingButton::create()) {
+            auto winSize = cocos2d::CCDirector::get()->getWinSize();
             btn->setPosition({winSize.width - 40.f, winSize.height - 80.f});
             this->addChild(btn, 100);
         }
