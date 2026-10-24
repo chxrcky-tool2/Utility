@@ -1,19 +1,51 @@
 #include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 
-// Put the forward declarations INSIDE the cky namespace
-namespace cky {
-    void ckyBuildPanel(PlayLayer* pl);
-    void ckyBuildHud(PlayLayer* pl);
-    void ckyBuildStartPos(PlayLayer* pl);
+void ckyBuildPanel(PlayLayer* pl);
+void ckyBuildHud(PlayLayer* pl);
+void ckyBuildStartPos(PlayLayer* pl);
 
-    // Add the missing functions here
+// Define EVERYTHING that state.hpp promised here
+namespace cky {
+    bool save() {
+        std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
+        std::ofstream f(path, std::ios::binary);
+        if (!f.is_open()) return false;
+        f.write("CKY1", 4);
+        uint32_t count = macro.size();
+        f.write(reinterpret_cast<const char*>(&count), sizeof(count));
+        for (auto& i : macro) f.write(reinterpret_cast<const char*>(&i), sizeof(MacroInput));
+        return true;
+    }
+
+    bool load() {
+        std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
+        std::ifstream f(path, std::ios::binary);
+        if (!f.is_open()) return false;
+        char h[4]; f.read(h, 4);
+        if (std::string(h, 4) != "CKY1") return false;
+        uint32_t count; f.read(reinterpret_cast<char*>(&count), sizeof(count));
+        macro.clear(); macro.reserve(count);
+        for (uint32_t i = 0; i < count; ++i) { MacroInput in; f.read(reinterpret_cast<char*>(&in), sizeof(MacroInput)); macro.push_back(in); }
+        cursor = 0;
+        return true;
+    }
+
+    bool slotExists() {
+        std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
+        return std::filesystem::exists(path);
+    }
+
+    void clearMacro() { macro.clear(); cursor = 0; }
+    
+    void ckyNotify(std::string const& msg, bool success) { 
+        Notification::create(msg, success ? NotificationIcon::Success : NotificationIcon::Error)->show(); 
+    }
+    
     void ckyApplyHudScale() {
         auto pl = PlayLayer::get();
         if (!pl || !pl->m_uiLayer) return;
-        if (auto hud = pl->m_uiLayer->getChildByID("cky-hud")) {
-            hud->setScale(cky::hudScale);
-        }
+        if (auto hud = pl->m_uiLayer->getChildByID("cky-hud")) hud->setScale(cky::hudScale);
     }
     void ckyApplyAudio() {}
     void ckyApplyFps() {}
@@ -27,8 +59,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::playbackCursor = 0;
         cky::armed = false;
         
-        // These will now perfectly match the forward declarations
-        cky::ckyBuildPanel(this);
+        cky::ckyOpenPanel(this->m_uiLayer); 
         cky::ckyBuildHud(this);
         cky::ckyBuildStartPos(this);
     }
@@ -40,7 +71,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::clickAccumulator = 0.0f;
         cky::currentClicks = 0;
 
-        if (cky::recording) { cky::currentMacro.clear(); cky::armed = true; }
+        if (cky::recording) { cky::macro.clear(); cky::armed = true; }
         if (cky::playing) { cky::armed = true; }
     }
 
