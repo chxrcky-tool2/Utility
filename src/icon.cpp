@@ -15,15 +15,20 @@ public:
         if (!CCNode::init()) return false;
         this->setID("cky-icon");
         
-        // Fix: Safely load the sprite frame
-        auto frame = cocos2d::CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("GJ_commentIcon_001.png");
-        if (!frame) frame = cocos2d::CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("GJ_chatBtn_001.png");
+        // Use a simple, always-loaded GD sprite (the circle button)
+        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_roundButton_001.png");
+        if (!spr) {
+            // Fallback if the frame isn't found
+            spr = cocos2d::CCSprite::create("GJ_button_01.png");
+        }
         
-        auto spr = cocos2d::CCSprite::createWithSpriteFrame(frame);
-        if (!spr) spr = cocos2d::CCSprite::create("GJ_commentIcon_001.png");
-        if (spr) spr->setScale(1.2f);
-        
+        // HARD CHECK: If the sprite is still null, return false to prevent crash
+        if (!spr) return false;
+
+        spr->setScale(1.0f);
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyIcon::onClick));
+        
+        // HARD CHECK: If the button failed to create, return false
         if (!btn) return false;
 
         auto menu = cocos2d::CCMenu::create(btn);
@@ -44,8 +49,8 @@ class $modify(CkyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
         
-        // Fix: Delay the icon creation by one frame so sprites load
-        this->scheduleOnce(schedule_selector(CkyMenuLayer::addCkyIcon), 0.1f);
+        // Increase the delay to 0.5 seconds to guarantee the game has loaded
+        this->scheduleOnce(schedule_selector(CkyMenuLayer::addCkyIcon), 0.5f);
         return true;
     }
 
@@ -60,7 +65,7 @@ class $modify(CkyMenuLayer, MenuLayer) {
 class $modify(CkyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        this->scheduleOnce(schedule_selector(CkyPauseLayer::addCkyPauseIcon), 0.1f);
+        this->scheduleOnce(schedule_selector(CkyPauseLayer::addCkyPauseIcon), 0.5f);
     }
 
     void addCkyPauseIcon(float) {
