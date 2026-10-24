@@ -5,6 +5,7 @@
 class CkyFloatingButton : public cocos2d::CCLayer {
     cocos2d::CCPoint m_dragStart;
     bool m_isDragging = false;
+    cocos2d::CCSprite* m_sprite = nullptr;
 
 public:
     static CkyFloatingButton* create() {
@@ -20,14 +21,12 @@ public:
         this->setTouchEnabled(true);
         this->setTouchMode(cocos2d::kCCTouchesOneByOne);
 
-        auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
-        if (!spr) spr = cocos2d::CCSprite::create("GJ_button_01.png");
-        if (spr) {
-            spr->setScale(1.1f);
-            auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyFloatingButton::onClick));
-            auto menu = cocos2d::CCMenu::create(btn);
-            menu->setPosition({0.f, 0.f});
-            this->addChild(menu);
+        m_sprite = cocos2d::CCSprite::createWithSpriteFrameName("GJ_editBtn_001.png");
+        if (!m_sprite) m_sprite = cocos2d::CCSprite::create("GJ_button_01.png");
+        
+        if (m_sprite) {
+            m_sprite->setScale(1.1f);
+            this->addChild(m_sprite); 
         }
         
         return true;
@@ -37,33 +36,38 @@ public:
         auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
         if (this->boundingBox().containsPoint(touchPos)) {
             m_dragStart = touchPos - this->getPosition();
-            m_isDragging = true;
+            m_isDragging = false; 
             return true;
         }
         return false;
     }
 
     void onTouchMoved(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
+        auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
+        auto diff = touchPos - this->getPosition();
+        
+        if (std::abs(diff.x) > 5.f || std::abs(diff.y) > 5.f) {
+            m_isDragging = true;
+        }
+        
         if (m_isDragging) {
-            auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
             this->setPosition(touchPos - m_dragStart);
         }
     }
 
     void onTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
+        if (!m_isDragging) {
+            auto parent = this->getParent();
+            if (parent) cky::ckyOpenPanel(parent);
+        }
         m_isDragging = false;
-    }
-
-    void onClick(cocos2d::CCObject*) {
-        auto parent = this->getParent();
-        if (parent) cky::ckyOpenPanel(parent);
     }
 };
 
 class $modify(CkyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
-        this->scheduleOnce(schedule_selector(CkyMenuLayer::addFloatingButton), 0.3f);
+        this->scheduleOnce(schedule_selector(CkyMenuLayer::addFloatingButton), 0.5f);
         return true;
     }
     
@@ -78,7 +82,7 @@ class $modify(CkyMenuLayer, MenuLayer) {
 class $modify(CkyPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        this->scheduleOnce(schedule_selector(CkyPauseLayer::addFloatingButton), 0.3f);
+        this->scheduleOnce(schedule_selector(CkyPauseLayer::addFloatingButton), 0.5f);
     }
     
     void addFloatingButton(float) {
