@@ -13,8 +13,6 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-hud");
-        
-        // Moved inside the top of the brown box
         this->setPosition({130.f, 270.f});
 
         m_label = cocos2d::CCLabelBMFont::create("0 / 0 / 0", "bigFont.fnt");
