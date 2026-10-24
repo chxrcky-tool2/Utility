@@ -4,11 +4,12 @@
 #include <string>
 
 namespace cky {
+    constexpr int P2_FLAG = 0x100;
+
     struct MacroInput {
         uint32_t frame;
         bool isPress;
-        int button;
-        bool isPlayer1;
+        int playerButton; 
     };
 
     struct CheckpointData {
@@ -41,7 +42,4 @@ namespace cky {
     inline double frameClock = 0.0;
     inline std::vector<CheckpointData> checkpoints;
     inline int lastCheckpointCount = 0;
-
-    void saveMacro(const std::string& name);
-    bool loadMacro(const std::string& name);
 }
