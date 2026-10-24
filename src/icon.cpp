@@ -15,25 +15,21 @@ public:
         if (!CCNode::init()) return false;
         this->setID("cky-icon");
         
-        // Use a simple, always-loaded GD sprite (the circle button)
         auto spr = cocos2d::CCSprite::createWithSpriteFrameName("GJ_roundButton_001.png");
-        if (!spr) {
-            // Fallback if the frame isn't found
-            spr = cocos2d::CCSprite::create("GJ_button_01.png");
-        }
-        
-        // HARD CHECK: If the sprite is still null, return false to prevent crash
+        if (!spr) spr = cocos2d::CCSprite::create("GJ_button_01.png");
         if (!spr) return false;
 
         spr->setScale(1.0f);
-        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyIcon::onClick));
         
-        // HARD CHECK: If the button failed to create, return false
+        // Create the button
+        auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(CkyIcon::onClick));
         if (!btn) return false;
 
-        auto menu = cocos2d::CCMenu::create(btn);
+        // Create the menu FIRST without items, then add the button
+        auto menu = cocos2d::CCMenu::create();
         if (menu) {
             menu->setPosition({0.f, 0.f});
+            menu->addChild(btn); // Add the button after menu creation
             this->addChild(menu);
         }
         
@@ -48,8 +44,6 @@ public:
 class $modify(CkyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
-        
-        // Increase the delay to 0.5 seconds to guarantee the game has loaded
         this->scheduleOnce(schedule_selector(CkyMenuLayer::addCkyIcon), 0.5f);
         return true;
     }
