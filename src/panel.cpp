@@ -1,5 +1,6 @@
 #include "state.hpp"
-#include <Geode/ui/General.hpp>
+#include <Geode/binding/CCMenuItemToggler.hpp>
+#include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 
 class CkyPanel : public cocos2d::CCNode {
 public:
