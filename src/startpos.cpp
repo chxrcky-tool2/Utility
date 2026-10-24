@@ -1,6 +1,7 @@
 #include "state.hpp"
 #include <algorithm>
 #include <vector>
+#include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 
 class CkySpSwitcher : public cocos2d::CCNode {
     std::vector<geode::Ref<StartPosObject>> m_pos;
