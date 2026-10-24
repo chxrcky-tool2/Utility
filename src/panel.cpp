@@ -1,4 +1,5 @@
-#include "cky.hpp"
+#include "state.hpp"
+#include <Geode/ui/General.hpp>
 
 class CkyPanel : public cocos2d::CCNode {
 public:
