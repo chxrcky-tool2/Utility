@@ -1,5 +1,6 @@
 #include "state.hpp"
 #include <Geode/utils/web.hpp>
+#include <Geode/binding/CCMenuItemToggler.hpp>
 
 namespace {
     ccColor3B const kCard = ccc3(22, 24, 40); ccColor3B const kSide = ccc3(14, 15, 28); ccColor3B const kTab = ccc3(30, 34, 60); ccColor3B const kOff = ccc3(62, 66, 90); ccColor3B const kOn = ccc3(60, 200, 120); ccColor3B const kAccent = ccc3(60, 130, 255); ccColor3B const kBtn = ccc3(45, 52, 88);
@@ -110,11 +111,11 @@ public:
         case T_REC: if (cky::recording) { cky::recording = false; cky::recArmed = false; } else { cky::recording = true; cky::playing = false; cky::playArmed = false; cky::macroTps = cky::effTps(); cky::recArmed = (cky::step == 0); if (!cky::recArmed) cky::ckyNotify("Recording starts when you restart the level"); } break;
         case T_PLAY: if (cky::playing) { cky::playing = false; cky::playArmed = false; } else if (cky::macro.empty()) { cky::ckyNotify("No macro loaded", false); } else { cky::playing = true; cky::recording = false; cky::recArmed = false; cky::cursor = 0; cky::playArmed = (cky::step == 0); if (!cky::playArmed) cky::ckyNotify("Playback ON: restart the level to start it"); } break;
         case T_STEPPER: cky::frozen = !cky::frozen; cky::pending = 0; break;
-        case T_TPS: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tpsOn = !cky::tpsOn; cky::resetMeasure(); break;
+        case T_TPS: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tpsOn = !cky::tpsOn; break;
         case T_SPEED: cky::speedOn = !cky::speedOn; break;
         case T_AUDIO: cky::audioSpeed = !cky::audioSpeed; break;
         case T_FPS: cky::fpsOn = !cky::fpsOn; break;
-        case T_NOCLIP: cky::noclip = !cky::noclip; cky::ncReset(); break;
+        case T_NOCLIP: cky::noclip = !cky::noclip; break;
         case T_SAFE: cky::safeMode = !cky::safeMode; break;
         case T_NCACC: cky::ncShowAcc = !cky::ncShowAcc; break;
         case T_NCDEATH: cky::ncShowDeaths = !cky::ncShowDeaths; break;
@@ -133,8 +134,8 @@ public:
         case B_LOAD: cky::ckyNotify(cky::load() ? fmt::format("Loaded slot {}", cky::slot).c_str() : "Load failed", true); break;
         case B_CLEAR: cky::clearMacro(); cky::ckyNotify("Macro buffer cleared"); break;
         case B_SLOT_DN: case B_SLOT_UP: cky::slot = std::clamp(cky::slot + (t == B_SLOT_UP ? 1 : -1), 1, cky::MAX_SLOTS); break;
-        case B_TPS_DN: case B_TPS_UP: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tps = cky::nextVal(cky::tpsList, cky::tps, t == B_TPS_UP ? 1 : -1); cky::tpsOn = true; cky::resetMeasure(); break;
-        case B_HIGH: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tps = (cky::tps >= 20000.f) ? 240.f : cky::tps + 1000.f; cky::tpsOn = true; cky::resetMeasure(); break;
+        case B_TPS_DN: case B_TPS_UP: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tps = cky::nextVal(cky::tpsList, cky::tps, t == B_TPS_UP ? 1 : -1); cky::tpsOn = true; break;
+        case B_HIGH: if (cky::recording) { cky::ckyNotify("Stop recording first", false); break; } cky::tps = (cky::tps >= 20000.f) ? 240.f : cky::tps + 1000.f; cky::tpsOn = true; break;
         case B_SPD_DN: case B_SPD_UP: cky::speed = cky::nextVal(cky::speedList, cky::speed, t == B_SPD_UP ? 1 : -1); cky::speedOn = true; break;
         case B_FPS_DN: case B_FPS_UP: cky::fps = cky::nextVal(cky::fpsList, cky::fps, t == B_FPS_UP ? 1 : -1); cky::fpsOn = true; break;
         case B_HUDSZ_DN: case B_HUDSZ_UP: cky::hudScale = cky::nextVal(cky::sizeList, cky::hudScale, t == B_HUDSZ_UP ? 1 : -1); cky::ckyApplyHudScale(); break;
@@ -145,7 +146,14 @@ public:
         refresh(); cky::ckyHudRefresh();
     }
 };
+
 namespace cky {
+    void ckyBuildPanel(PlayLayer* pl) {
+        if (!pl || !pl->m_uiLayer) return;
+        if (pl->m_uiLayer->getChildByID("cky-panel")) return;
+        if (auto panel = CkyPanel::create()) pl->m_uiLayer->addChild(panel, 100); 
+    }
+
     void ckyOpenPanel(CCNode* host) {
         if (!host || host->getChildByID("cky-panel")) return;
         auto p = CkyPanel::create();
