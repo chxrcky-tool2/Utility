@@ -30,22 +30,24 @@ public:
     }
 };
 
-void ckyBuildHud(PlayLayer* pl) {
-    if (!pl || !pl->m_uiLayer) return;
-    if (pl->m_uiLayer->getChildByID("cky-hud")) return;
-    if (auto hud = CkyHud::create()) pl->m_uiLayer->addChild(hud, 10);
-}
-
-void ckyHudRefresh() {
-    auto pl = PlayLayer::get();
-    if (!pl || !pl->m_uiLayer) return;
-    if (auto hud = typeinfo_cast<CkyHud*>(pl->m_uiLayer->getChildByID("cky-hud"))) {
-        hud->updateHud();
+namespace cky {
+    void ckyBuildHud(PlayLayer* pl) {
+        if (!pl || !pl->m_uiLayer) return;
+        if (pl->m_uiLayer->getChildByID("cky-hud")) return;
+        if (auto hud = CkyHud::create()) pl->m_uiLayer->addChild(hud, 10);
     }
-}
-
-CCNode* ckyHudNode() {
-    auto pl = PlayLayer::get();
-    if (!pl || !pl->m_uiLayer) return nullptr;
-    return pl->m_uiLayer->getChildByID("cky-hud");
+    
+    void ckyHudRefresh() {
+        auto pl = PlayLayer::get();
+        if (!pl || !pl->m_uiLayer) return;
+        if (auto hud = typeinfo_cast<CkyHud*>(pl->m_uiLayer->getChildByID("cky-hud"))) {
+            hud->updateHud();
+        }
+    }
+    
+    CCNode* ckyHudNode() {
+        auto pl = PlayLayer::get();
+        if (!pl || !pl->m_uiLayer) return nullptr;
+        return pl->m_uiLayer->getChildByID("cky-hud");
+    }
 }
