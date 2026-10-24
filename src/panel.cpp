@@ -20,19 +20,9 @@ public:
         bg->setOpacity(220);
         this->addChild(bg);
 
-        auto scroll = cocos2d::extension::CCScrollView::create();
-        scroll->setContentSize({180.f, 200.f});
-        scroll->setPosition({90.f, 130.f}); 
-        scroll->setDirection(cocos2d::extension::kCCScrollViewDirectionVertical);
-        this->addChild(scroll);
-
-        auto content = cocos2d::CCNode::create();
-        content->setContentSize({180.f, 400.f});
-        scroll->setContainer(content);
-
         auto menu = cocos2d::CCMenu::create();
-        menu->setPosition({90.f, 380.f});
-        content->addChild(menu);
+        menu->setPosition({90.f, 130.f}); 
+        this->addChild(menu);
 
         auto mkToggle = [&](const char* text, bool* stateVar, float yPos) {
             auto label = cocos2d::CCLabelBMFont::create(text, "bigFont.fnt");
@@ -44,30 +34,30 @@ public:
             toggler->toggle(*stateVar); 
             menu->addChild(toggler);
             
-            label->setPosition({10.f, yPos});
+            label->setPosition({15.f, yPos});
             menu->addChild(label);
         };
 
-        mkToggle("Noclip", &cky::noclip, 0.f);
-        mkToggle("Record", &cky::recording, -40.f);
-        mkToggle("Play", &cky::playing, -80.f);
-        mkToggle("Auto Clicker", &cky::autoClicker, -120.f);
-        mkToggle("Clickbot", &cky::clickbotSounds, -160.f);
+        // Spaced out so they all fit inside the box
+        mkToggle("Noclip", &cky::noclip, 80.f);
+        mkToggle("Record", &cky::recording, 40.f);
+        mkToggle("Play", &cky::playing, 0.f);
+        mkToggle("Auto Clicker", &cky::autoClicker, -40.f);
+        mkToggle("Clickbot", &cky::clickbotSounds, -80.f);
 
         auto licenseBtn = cocos2d::CCMenuItemLabel::create(
-            cocos2d::CCLabelBMFont::create("GPL-3.0 License", "bigFont.fnt"),
+            cocos2d::CCLabelBMFont::create("GPL-3.0", "bigFont.fnt"),
             this, menu_selector(CkyPanel::onLicense)
         );
         licenseBtn->setScale(0.3f);
         licenseBtn->setOpacity(153);
-        licenseBtn->setPosition({0.f, -240.f});
+        licenseBtn->setPosition({0.f, -115.f});
         menu->addChild(licenseBtn);
 
         return true;
     }
 
     void onToggle(cocos2d::CCObject* sender) {
-        // THE FINAL FIX: geode::cast::
         auto toggler = geode::cast::typeinfo_cast<CCMenuItemToggler*>(sender);
         if (toggler) {
             bool* stateVar = reinterpret_cast<bool*>(toggler->getTag());
