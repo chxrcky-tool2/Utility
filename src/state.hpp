@@ -60,7 +60,6 @@ namespace cky {
     inline float fps = 60.f;
     inline float hudScale = 1.f;
     inline float iconScale = 1.f;
-    inline float actualTps = 240.f;
     inline float targetTps = 240.f;
     inline float autoClickerCps = 136.0f;
     inline float clickAccumulator = 0.0f;
@@ -70,10 +69,6 @@ namespace cky {
     inline int highestClicks = 0;
     inline int totalClicks = 0;
     inline int slot = 1;
-    inline int ncFrames = 0, ncBad = 0, ncDeaths = 0;
-    inline bool ncBlocked = false, ncPrevBad = false;
-    inline int measSteps = 0;
-    inline float measTime = 0.f;
 
     // Data
     inline std::vector<MacroInput> macro;
@@ -82,16 +77,10 @@ namespace cky {
     inline size_t playbackCursor = 0;
     inline double frameClock = 0.0;
     inline uint32_t step = 0;
-    inline int hudTick = 0;
-    inline std::vector<Cp> ckpts;
-    inline bool cpInit = false;
 
     // Helpers
     inline float effTps() { return tpsOn ? tps : 240.f; }
     inline float clockInc() { return 1.0 / effTps(); }
-    inline bool cheating() { return noclip || speedOn || tpsOn; }
-    inline void ncReset() { ncFrames = 0; ncBad = 0; ncDeaths = 0; ncBlocked = false; ncPrevBad = false; }
-    inline void resetMeasure() { measSteps = 0; measTime = 0.f; actualTps = effTps(); }
 
     inline float nextVal(std::vector<float> const& list, float cur, int dir) {
         for (size_t i = 0; i < list.size(); ++i) {
@@ -108,21 +97,22 @@ namespace cky {
     inline std::vector<float> fpsList = {30, 60, 120, 144, 240};
     inline std::vector<float> sizeList = {0.5f, 0.75f, 1.f, 1.25f, 1.5f, 2.f};
 
+    // Functions
     bool save();
     bool load();
     bool slotExists();
     void clearMacro();
-    void rewindTo(Cp const& cp);
-    void trackCheckpoints(int count);
     void ckyNotify(std::string const& msg, bool success = true);
     
+    // UI Functions
+    void ckyBuildPanel(PlayLayer* pl);
     void ckyBuildHud(PlayLayer* pl);
     void ckyHudRefresh();
     void ckyBuildStartPos(PlayLayer* pl);
+    void ckyApplyHudScale();
     void ckyApplyAudio();
     void ckyApplyFps();
     void ckyApplyHitboxes();
-    void ckyApplyHudScale();
     void ckyOpenPanel(CCNode* host);
     void ckySetStartPosVisible(bool on);
     CCNode* ckyHudNode();
