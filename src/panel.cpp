@@ -67,8 +67,8 @@ public:
     }
 
     void onToggle(cocos2d::CCObject* sender) {
-        // Changed to geode::typeinfo_cast
-        auto toggler = geode::typeinfo_cast<CCMenuItemToggler*>(sender);
+        // THE FINAL FIX: geode::cast::
+        auto toggler = geode::cast::typeinfo_cast<CCMenuItemToggler*>(sender);
         if (toggler) {
             bool* stateVar = reinterpret_cast<bool*>(toggler->getTag());
             if (stateVar) *stateVar = !(*stateVar);
