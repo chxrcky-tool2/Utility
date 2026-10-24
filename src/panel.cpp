@@ -60,7 +60,7 @@ public:
         return true;
     }
 
-    bool onTouchBegan(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override {
+    bool onTouchBegan(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
         auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
         if (this->boundingBox().containsPoint(touchPos)) {
             m_dragStart = touchPos - this->getPosition();
@@ -70,14 +70,14 @@ public:
         return false;
     }
 
-    void onTouchMoved(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override {
+    void onTouchMoved(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
         if (m_isDragging) {
             auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
             this->setPosition(touchPos - m_dragStart);
         }
     }
 
-    void onTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override {
+    void onTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
         m_isDragging = false;
     }
 
