@@ -3,22 +3,24 @@
 #include <Geode/binding/CCMenuItemToggler.hpp>
 
 namespace {
-    ccColor3B const kBg = ccc3(150, 90, 55); ccColor3B const kSide = ccc3(110, 60, 35); ccColor3B const kBtn = ccc3(90, 50, 25); ccColor3B const kTxt = ccc3(255, 255, 255); ccColor3B const kBlue = ccc3(100, 200, 255);
-    enum : int { T_REC = 1, T_PLAY, T_STEPPER, B_TPS_DN, B_TPS_UP, B_SPD_DN, B_SPD_UP, B_SAVE, B_LOAD, L_TPS = 70, L_SPEED, L_INFO, TAB_BASE = 100 };
+    ccColor3B const kBg = ccc3(150, 90, 55); 
+    ccColor3B const kSide = ccc3(110, 60, 35); 
+    ccColor3B const kBtn = ccc3(90, 50, 25); 
+    ccColor3B const kBlue = ccc3(100, 200, 255);
+    enum : int { T_REC = 1, T_PLAY, T_STEPPER, B_TPS_DN, B_TPS_UP, B_SAVE, B_LOAD, L_TPS = 70, TAB_BASE = 100 };
 }
 
 class CkyPanel : public CCNode {
-    CCNode* m_content = nullptr; CCMenu* m_menu = nullptr; CCMenu* m_tabMenu = nullptr;
-    float m_y = 0.f; int m_tab = 0;
+    CCMenu* m_menu = nullptr;
+    CCMenu* m_tabMenu = nullptr;
+    CCNode* m_content = nullptr;
+    CCPoint m_dragStart;
+    bool m_isDragging = false;
+    int m_currentTab = 0;
+
 public:
     static CkyPanel* create() { auto r = new CkyPanel(); if (r && r->init()) { r->autorelease(); return r; } CC_SAFE_DELETE(r); return nullptr; }
     
-    void attachTo(CCNode* host) {
-        auto win = CCDirector::get()->getWinSize();
-        this->setPosition({win.width / 2.f, win.height / 2.f}); 
-        host->addChild(this, 2000);
-    }
-
     CCMenuItemSpriteExtra* makeBtn(CCMenu* menu, SEL_MenuHandler cb, int tag, float x, float y, float w, float h, char const* text, ccColor3B color) {
         auto bg = CCScale9Sprite::create("square02_001.png"); bg->setContentSize({w, h}); bg->setColor(color);
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt"); lbl->setScale(0.4f); lbl->setPosition({w/2, h/2}); bg->addChild(lbl);
@@ -26,59 +28,91 @@ public:
     }
 
     bool init() override {
-        if (!CCNode::init()) return false; this->setID("cky-panel"); float W = 440.f, H = 270.f;
+        if (!CCNode::init()) return false; 
+        this->setID("cky-panel"); 
+        float W = 440.f, H = 270.f;
         
+        // Backgrounds
         auto frame = CCScale9Sprite::create("GJ_square01.png"); frame->setContentSize({W, H}); frame->setColor(ccc3(255, 105, 180)); this->addChild(frame);
         auto card = CCScale9Sprite::create("GJ_square01.png"); card->setContentSize({W - 10.f, H - 10.f}); card->setColor(kBg); this->addChild(card);
         auto side = CCScale9Sprite::create("GJ_square01.png"); side->setContentSize({118.f, H - 20.f}); side->setColor(kSide); side->setPosition({-149.f, 0.f}); this->addChild(side);
         
         auto title = CCLabelBMFont::create("CHXRCKY", "bigFont.fnt"); title->setScale(0.5f); title->setColor(kBlue); title->setPosition({-149.f, 108.f}); this->addChild(title);
         
-        m_tabMenu = CCMenu::create(); m_tabMenu->setPosition({0.f, 0.f}); this->addChild(m_tabMenu);
-        
-        // REMOVED "Converter" and "Render"
-        static char const* names[4] = { "Bot", "Player", "Visual", "Settings" };
-        for (int i = 0; i < 4; ++i) makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i, -149.f, 56.f - 38.f * static_cast<float>(i), 104.f, 30.f, names[i], kSide);
+        // Close Button
+        auto closeMenu = CCMenu::create(); this->addChild(closeMenu);
+        auto closeBtn = CCMenuItemSpriteExtra::create(CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"), this, menu_selector(CkyPanel::onClose));
+        closeBtn->setPosition({W / 2.f - 22.f, H / 2.f - 22.f});
+        closeMenu->addChild(closeBtn);
 
-        auto closeMenu = CCMenu::create(); closeMenu->setPosition({0.f, 0.f});
-        auto closeSpr = CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"); closeSpr->setScale(0.55f);
-        auto closeBtn = CCMenuItemSpriteExtra::create(closeSpr, this, menu_selector(CkyPanel::onClose)); closeBtn->setPosition({W / 2.f - 22.f, H / 2.f - 22.f}); closeMenu->addChild(closeBtn); this->addChild(closeMenu);
-        
-        buildTab(0); return true;
+        // Tabs
+        m_tabMenu = CCMenu::create(); this->addChild(m_tabMenu);
+        static char const* names[4] = { "Bot", "Player", "Visual", "Settings" };
+        for (int i = 0; i < 4; ++i) {
+            makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i, -149.f, 56.f - 38.f * static_cast<float>(i), 104.f, 30.f, names[i], kSide);
+        }
+
+        // Drag Listener (Priority -128 so buttons get clicked first)
+        auto listener = cocos2d::CCEventListenerTouchOneByOne::create();
+        listener->setSwallowTouches(true);
+        listener->onTouchBegan = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
+            auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
+            if (this->boundingBox().containsPoint(touchPos)) {
+                m_dragStart = touchPos - this->getPosition();
+                m_isDragging = true;
+                return true;
+            }
+            return false;
+        };
+        listener->onTouchMoved = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
+            if (m_isDragging) {
+                auto touchPos = this->getParent()->convertToNodeSpace(touch->getLocation());
+                this->setPosition(touchPos - m_dragStart);
+            }
+        };
+        listener->onTouchEnded = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) { m_isDragging = false; };
+        cocos2d::CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(listener, -128, true);
+        listener->autorelease();
+
+        buildTab(0);
+        return true;
     }
 
     void buildTab(int tab) {
-        m_tab = tab; if (m_content) m_content->removeFromParent(); m_content = CCNode::create(); this->addChild(m_content);
-        m_menu = CCMenu::create(); m_menu->setPosition({0.f, 0.f}); m_content->addChild(m_menu);
+        m_currentTab = tab;
+        if (m_content) m_content->removeFromParent();
+        m_content = CCNode::create(); this->addChild(m_content);
         
-        // REMOVED "Converter" and "Render"
+        m_menu = CCMenu::create(); m_content->addChild(m_menu);
+        
         static char const* names[4] = { "Bot", "Player", "Visual", "Settings" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt"); head->setScale(0.5f); head->setColor(kBlue); head->setPosition({80.f, 112.f}); m_content->addChild(head);
-        m_y = 70.f;
+        
+        float y = 70.f;
         
         if (tab == 0) { // Bot
-            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "RECORD", kBtn); m_y -= 35.f;
-            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_PLAY, 80.f, m_y, 200.f, 25.f, "PLAYBACK", kBtn); m_y -= 35.f;
-            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_STEPPER, 80.f, m_y, 200.f, 25.f, "FRAME STEPPER", kBtn); m_y -= 35.f;
-            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_SAVE, 20.f, m_y, 100.f, 25.f, "SAVE", kBtn);
-            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_LOAD, 140.f, m_y, 100.f, 25.f, "LOAD", kBtn); m_y -= 35.f;
-            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_DN, 20.f, m_y, 30.f, 25.f, "-", kBtn);
-            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_UP, 140.f, m_y, 30.f, 25.f, "+", kBtn);
-            auto l = CCLabelBMFont::create("240", "bigFont.fnt"); l->setScale(0.4f); l->setPosition({80.f, m_y}); l->setTag(L_TPS); m_content->addChild(l);
+            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, y, 200.f, 25.f, "RECORD", kBtn); y -= 35.f;
+            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_PLAY, 80.f, y, 200.f, 25.f, "PLAYBACK", kBtn); y -= 35.f;
+            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_STEPPER, 80.f, y, 200.f, 25.f, "FRAME STEPPER", kBtn); y -= 35.f;
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_SAVE, 20.f, y, 100.f, 25.f, "SAVE", kBtn);
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_LOAD, 140.f, y, 100.f, 25.f, "LOAD", kBtn); y -= 35.f;
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_DN, 20.f, y, 30.f, 25.f, "-", kBtn);
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_UP, 140.f, y, 30.f, 25.f, "+", kBtn);
+            auto l = CCLabelBMFont::create("240", "bigFont.fnt"); l->setScale(0.4f); l->setPosition({80.f, y}); l->setTag(L_TPS); m_content->addChild(l);
         } 
         else if (tab == 1) { // Player
-            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "NOCLIP", kBtn);
+            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), 10, 80.f, y, 200.f, 25.f, "NOCLIP", kBtn);
         } 
         else if (tab == 2) { // Visual
-            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "SHOW HITBOXES", kBtn);
+            makeBtn(m_menu, menu_selector(CkyPanel::onToggle), 11, 80.f, y, 200.f, 25.f, "SHOW HITBOXES", kBtn);
         }
         else if (tab == 3) { // Settings
-            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_SAVE, 80.f, m_y, 200.f, 25.f, "GPL-3.0 LICENSE", kBtn);
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), 12, 80.f, y, 200.f, 25.f, "GPL-3.0 LICENSE", kBtn);
         }
     }
 
     void onTab(CCObject* s) { buildTab(static_cast<CCNode*>(s)->getTag() - TAB_BASE); }
-    void onClose(CCObject*) { this->removeFromParent(); }
+    void onClose(CCObject*) { this->setVisible(false); }
     
     void onToggle(CCObject* s) {
         int t = static_cast<CCNode*>(s)->getTag();
@@ -96,8 +130,18 @@ public:
 
 namespace cky {
     void ckyOpenPanel(CCNode* host) {
-        if (!host || host->getChildByID("cky-panel")) return;
-        auto p = CkyPanel::create(); if (p) p->attachTo(host);
+        if (!host) return;
+        auto p = host->getChildByID("cky-panel");
+        if (p) {
+            p->setVisible(!p->isVisible()); // Toggle visibility
+            return;
+        }
+        auto newP = CkyPanel::create(); 
+        if (newP) {
+            auto win = CCDirector::get()->getWinSize();
+            newP->setPosition({win.width / 2.f, win.height / 2.f});
+            host->addChild(newP, 2000);
+        }
     }
     void ckyBuildPanel(PlayLayer* pl) { ckyOpenPanel(pl->m_uiLayer); }
 }
