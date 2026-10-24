@@ -5,11 +5,12 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 using namespace geode::prelude;
 
 namespace cky {
-    constexpr uint32_t MAGIC1 = 0x31594B43; // "CKY1"
+    constexpr uint32_t MAGIC1 = 0x31594B43;
     constexpr int P2_FLAG = 0x100;
     constexpr int MAX_SLOTS = 10;
 
@@ -25,19 +26,20 @@ namespace cky {
         bool valid = false;
     };
 
-    // Core State
+    // Core States
     inline bool recording = false;
     inline bool playing = false;
     inline bool injecting = false;
     inline bool frozen = false;
-    inline int pending = 0;
-    inline bool dirty = false;
-    inline bool noclip = false;
-    inline bool safeMode = false;
+    inline bool armed = false;
     inline bool recArmed = false;
     inline bool playArmed = false;
+    inline bool noclip = false;
+    inline bool safeMode = false;
+    inline bool dirty = false;
+    inline int pending = 0;
 
-    // Toggles
+    // UI Toggles
     inline bool tpsOn = true;
     inline bool speedOn = false;
     inline bool audioSpeed = true;
@@ -48,6 +50,8 @@ namespace cky {
     inline bool ckptTelemetry = true;
     inline bool ncShowAcc = true;
     inline bool ncShowDeaths = true;
+    inline bool clickbotSounds = true;
+    inline bool autoClicker = false;
 
     // Values
     inline float speed = 1.f;
@@ -57,14 +61,15 @@ namespace cky {
     inline float hudScale = 1.f;
     inline float iconScale = 1.f;
     inline float actualTps = 240.f;
+    inline float targetTps = 240.f;
+    inline float autoClickerCps = 136.0f;
+    inline float clickAccumulator = 0.0f;
 
     // Telemetry
     inline int currentClicks = 0;
     inline int highestClicks = 0;
     inline int totalClicks = 0;
     inline int slot = 1;
-
-    // Noclip Tracking
     inline int ncFrames = 0, ncBad = 0, ncDeaths = 0;
     inline bool ncBlocked = false, ncPrevBad = false;
     inline int measSteps = 0;
@@ -72,11 +77,12 @@ namespace cky {
 
     // Data
     inline std::vector<MacroInput> macro;
+    inline std::vector<MacroInput> currentMacro;
     inline size_t cursor = 0;
+    inline size_t playbackCursor = 0;
     inline double frameClock = 0.0;
     inline uint32_t step = 0;
     inline int hudTick = 0;
-
     inline std::vector<Cp> ckpts;
     inline bool cpInit = false;
 
@@ -97,21 +103,19 @@ namespace cky {
         return list.back();
     }
 
-    // Lists
     inline std::vector<float> tpsList = {10, 20, 30, 60, 120, 240, 480, 1000, 2000, 5000, 10000, 20000};
     inline std::vector<float> speedList = {0.1f, 0.2f, 0.25f, 0.3f, 0.4f, 0.5f, 0.75f, 1.f, 1.5f, 2.f, 3.f, 4.f, 10.f};
     inline std::vector<float> fpsList = {30, 60, 120, 144, 240};
     inline std::vector<float> sizeList = {0.5f, 0.75f, 1.f, 1.25f, 1.5f, 2.f};
 
-    // Functions
     bool save();
     bool load();
     bool slotExists();
     void clearMacro();
     void rewindTo(Cp const& cp);
     void trackCheckpoints(int count);
+    void ckyNotify(std::string const& msg, bool success = true);
     
-    // Forward declarations for UI
     void ckyBuildHud(PlayLayer* pl);
     void ckyHudRefresh();
     void ckyBuildStartPos(PlayLayer* pl);
@@ -121,6 +125,5 @@ namespace cky {
     void ckyApplyHudScale();
     void ckyOpenPanel(CCNode* host);
     void ckySetStartPosVisible(bool on);
-    void ckyNotify(std::string const& msg, bool success = true);
     CCNode* ckyHudNode();
 }
