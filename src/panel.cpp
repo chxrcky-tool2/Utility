@@ -1,6 +1,6 @@
 #include "state.hpp"
 #include <Geode/utils/web.hpp>
-#include <fryy_55.amber/include/Amber.hpp>
+#include <Amber.hpp>
 
 using namespace amber;
 
