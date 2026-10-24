@@ -145,10 +145,11 @@ public:
         refresh(); cky::ckyHudRefresh();
     }
 };
-
-void ckyOpenPanel(CCNode* host) {
-    if (!host || host->getChildByID("cky-panel")) return;
-    auto p = CkyPanel::create();
-    if (!p) return;
-    p->attachTo(host);
+namespace cky {
+    void ckyOpenPanel(CCNode* host) {
+        if (!host || host->getChildByID("cky-panel")) return;
+        auto p = CkyPanel::create();
+        if (!p) return;
+        p->attachTo(host);
+    }
 }
