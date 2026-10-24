@@ -29,7 +29,9 @@ public:
         auto mk = [&](const char* txt, cocos2d::SEL_MenuHandler cb, float x) {
             auto s = cocos2d::CCLabelBMFont::create(txt, "bigFont.fnt");
             s->setScale(0.6f);
-            auto b = cocos2d::CCMenuItemSpriteExtra::create(s, this, cb);
+            
+            // Notice: No "cocos2d::" before CCMenuItemSpriteExtra
+            auto b = CCMenuItemSpriteExtra::create(s, this, cb);
             b->setPosition({x, 0.f});
             menu->addChild(b);
         };
