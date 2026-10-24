@@ -1,11 +1,7 @@
 #include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
 
-void ckyBuildPanel(PlayLayer* pl);
-void ckyBuildHud(PlayLayer* pl);
-void ckyBuildStartPos(PlayLayer* pl);
-
-// Define EVERYTHING that state.hpp promised here
 namespace cky {
     bool save() {
         std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
@@ -17,7 +13,6 @@ namespace cky {
         for (auto& i : macro) f.write(reinterpret_cast<const char*>(&i), sizeof(MacroInput));
         return true;
     }
-
     bool load() {
         std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
         std::ifstream f(path, std::ios::binary);
@@ -30,49 +25,43 @@ namespace cky {
         cursor = 0;
         return true;
     }
-
     bool slotExists() {
         std::string path = Mod::get()->getSaveDir().string() + "/slot_" + std::to_string(slot) + ".cky";
         return std::filesystem::exists(path);
     }
-
     void clearMacro() { macro.clear(); cursor = 0; }
-    
-    void ckyNotify(std::string const& msg, bool success) { 
-        Notification::create(msg, success ? NotificationIcon::Success : NotificationIcon::Error)->show(); 
-    }
-    
-    void ckyApplyHudScale() {
-        auto pl = PlayLayer::get();
-        if (!pl || !pl->m_uiLayer) return;
-        if (auto hud = pl->m_uiLayer->getChildByID("cky-hud")) hud->setScale(cky::hudScale);
-    }
-    void ckyApplyAudio() {}
-    void ckyApplyFps() {}
-    void ckyApplyHitboxes() {}
+    void ckyNotify(std::string const& msg, bool success) { Notification::create(msg, success ? NotificationIcon::Success : NotificationIcon::Error)->show(); }
+    void ckyApplyHudScale() {}
 }
 
 class $modify(CkyPlayLayer, PlayLayer) {
-    void setupHasCompleted() {
-        PlayLayer::setupHasCompleted();
-        cky::frameClock = 0.0;
-        cky::playbackCursor = 0;
+    // 1. Reset counters when entering the level
+    bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+        if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+        
+        cky::frameClock = 0.0; 
+        cky::playbackCursor = 0; 
         cky::armed = false;
+        cky::currentClicks = 0; // Reset current
+        cky::highestClicks = 0; // Reset highest (change this if you want it to save across attempts)
+        cky::totalClicks = 0;   // Reset total
         
         cky::ckyOpenPanel(this->m_uiLayer); 
         cky::ckyBuildHud(this);
         cky::ckyBuildStartPos(this);
+        return true;
     }
 
+    // 2. Reset current attempt counters when you die
     void resetLevel() {
         PlayLayer::resetLevel();
-        cky::frameClock = 0.0;
-        cky::playbackCursor = 0;
-        cky::clickAccumulator = 0.0f;
-        cky::currentClicks = 0;
+        cky::frameClock = 0.0; 
+        cky::playbackCursor = 0; 
+        cky::clickAccumulator = 0.0f; 
+        cky::currentClicks = 0; // Reset current attempt clicks
 
         if (cky::recording) { cky::macro.clear(); cky::armed = true; }
-        if (cky::playing) { cky::armed = true; }
+        if (cky::playing) cky::armed = true;
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
