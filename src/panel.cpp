@@ -1,6 +1,5 @@
 #include "state.hpp"
 #include <Geode/binding/CCMenuItemToggler.hpp>
-#include <Geode/binding/CCMenuItemSpriteExtra.hpp>
 
 class CkyPanel : public cocos2d::CCNode {
 public:
@@ -37,11 +36,14 @@ public:
         auto mkToggle = [&](const char* text, bool* stateVar, float yPos) {
             auto label = cocos2d::CCLabelBMFont::create(text, "bigFont.fnt");
             label->setScale(0.35f);
-            auto toggler = cocos2d::CCMenuItemToggler::createWithStandardSprites(this, menu_selector(CkyPanel::onToggle), 0.6f);
+            
+            // Notice: No "cocos2d::" before CCMenuItemToggler
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(CkyPanel::onToggle), 0.6f);
             toggler->setPosition({-40.f, yPos});
             toggler->setTag(reinterpret_cast<intptr_t>(stateVar)); 
             toggler->toggle(*stateVar); 
             menu->addChild(toggler);
+            
             label->setPosition({10.f, yPos});
             menu->addChild(label);
         };
@@ -65,7 +67,8 @@ public:
     }
 
     void onToggle(cocos2d::CCObject* sender) {
-        auto toggler = typeinfo_cast<cocos2d::CCMenuItemToggler*>(sender);
+        // Notice: No "cocos2d::" before CCMenuItemToggler
+        auto toggler = typeinfo_cast<CCMenuItemToggler*>(sender);
         if (toggler) {
             bool* stateVar = reinterpret_cast<bool*>(toggler->getTag());
             if (stateVar) *stateVar = !(*stateVar);
