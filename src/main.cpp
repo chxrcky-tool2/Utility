@@ -1,12 +1,13 @@
 #include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 
-void ckyBuildPanel(PlayLayer* pl);
-void ckyBuildHud(PlayLayer* pl);
-void ckyBuildStartPos(PlayLayer* pl);
-
-// Add the missing functions here
+// Put the forward declarations INSIDE the cky namespace
 namespace cky {
+    void ckyBuildPanel(PlayLayer* pl);
+    void ckyBuildHud(PlayLayer* pl);
+    void ckyBuildStartPos(PlayLayer* pl);
+
+    // Add the missing functions here
     void ckyApplyHudScale() {
         auto pl = PlayLayer::get();
         if (!pl || !pl->m_uiLayer) return;
@@ -25,9 +26,11 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::frameClock = 0.0;
         cky::playbackCursor = 0;
         cky::armed = false;
-        ckyBuildPanel(this);
-        ckyBuildHud(this);
-        ckyBuildStartPos(this);
+        
+        // These will now perfectly match the forward declarations
+        cky::ckyBuildPanel(this);
+        cky::ckyBuildHud(this);
+        cky::ckyBuildStartPos(this);
     }
 
     void resetLevel() {
