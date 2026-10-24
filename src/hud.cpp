@@ -1,4 +1,4 @@
-#include "cky.hpp"
+#include "state.hpp"
 
 class CkyHud : public cocos2d::CCNode {
 public:
@@ -13,11 +13,13 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-hud");
-        this->setPosition({10.f, 280.f});
+        // Moved position to align nicely inside the box
+        this->setPosition({50.f, 280.f});
 
         m_label = cocos2d::CCLabelBMFont::create("0 / 0 / 0", "bigFont.fnt");
         m_label->setScale(0.4f);
-        m_label->setAnchorPoint({0.f, 1.f});
+        // Changed anchor point so it centers the text
+        m_label->setAnchorPoint({0.5f, 0.5f});
         this->addChild(m_label);
         return true;
     }
