@@ -4,9 +4,7 @@
 
 class $modify(CkyPhysicsHook, GJBaseGameLayer) {
     float getModifiedDelta(float dt) {
-        if ((cky::effTps() == 240.f && !cky::frozen) || !PlayLayer::get()) {
-            return GJBaseGameLayer::getModifiedDelta(dt);
-        }
+        if ((cky::effTps() == 240.f && !cky::frozen) || !PlayLayer::get()) return GJBaseGameLayer::getModifiedDelta(dt);
         float modifier = cky::effTps();
         float total = dt + m_extraDelta;
         int steps = static_cast<int>(total / modifier + 0.0001f);
@@ -18,9 +16,7 @@ class $modify(CkyPhysicsHook, GJBaseGameLayer) {
 
 class $modify(CkySchedulerHook, cocos2d::CCScheduler) {
     void update(float dt) {
-        if (cky::speedOn && !cky::frozen && PlayLayer::get()) {
-            dt *= cky::speed;
-        }
+        if (cky::speedOn && !cky::frozen && PlayLayer::get()) dt *= cky::speed;
         cocos2d::CCScheduler::update(dt);
     }
 };
