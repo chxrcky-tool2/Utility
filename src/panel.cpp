@@ -21,16 +21,12 @@ public:
         this->addChild(bg);
 
         auto menu = cocos2d::CCMenu::create();
-        menu->setPosition({60.f, 130.f}); 
+        menu->setPosition({0.f, 0.f}); 
         this->addChild(menu);
 
         auto mkToggle = [&](const char* text, bool* stateVar, float yPos) {
-            auto toggler = CCMenuItemToggler::createWithStandardSprites(
-                this, // We will fix the cast here
-                menu_selector(CkyPanel::onToggle), 
-                0.6f
-            );
-            toggler->setPosition({0.f, yPos}); 
+            auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(CkyPanel::onToggle), 0.6f);
+            toggler->setPosition({40.f, 130.f + yPos}); 
             toggler->setTag(reinterpret_cast<intptr_t>(stateVar)); 
             toggler->toggle(*stateVar); 
             menu->addChild(toggler);
@@ -38,7 +34,7 @@ public:
             auto label = cocos2d::CCLabelBMFont::create(text, "bigFont.fnt");
             label->setScale(0.35f);
             label->setAnchorPoint({0.f, 0.5f});
-            label->setPosition({80.f, 130.f + yPos}); 
+            label->setPosition({60.f, 130.f + yPos}); 
             this->addChild(label);
         };
 
