@@ -1,6 +1,6 @@
 #include "icons.hpp"
+#include <Geode/modify/PlayerObject.hpp>
 
-// Placeholder for future icon hooks
 class $modify(CkyIconHook, PlayerObject) {
     void update(float dt) {
         PlayerObject::update(dt);
