@@ -35,8 +35,10 @@ public:
         auto title = CCLabelBMFont::create("CHXRCKY", "bigFont.fnt"); title->setScale(0.5f); title->setColor(kBlue); title->setPosition({-149.f, 108.f}); this->addChild(title);
         
         m_tabMenu = CCMenu::create(); m_tabMenu->setPosition({0.f, 0.f}); this->addChild(m_tabMenu);
-        static char const* names[5] = { "Bot", "Converter", "Player", "Visual", "Render" };
-        for (int i = 0; i < 5; ++i) makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i, -149.f, 56.f - 38.f * static_cast<float>(i), 104.f, 30.f, names[i], kSide);
+        
+        // REMOVED "Converter" and "Render"
+        static char const* names[4] = { "Bot", "Player", "Visual", "Settings" };
+        for (int i = 0; i < 4; ++i) makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i, -149.f, 56.f - 38.f * static_cast<float>(i), 104.f, 30.f, names[i], kSide);
 
         auto closeMenu = CCMenu::create(); closeMenu->setPosition({0.f, 0.f});
         auto closeSpr = CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"); closeSpr->setScale(0.55f);
@@ -48,11 +50,13 @@ public:
     void buildTab(int tab) {
         m_tab = tab; if (m_content) m_content->removeFromParent(); m_content = CCNode::create(); this->addChild(m_content);
         m_menu = CCMenu::create(); m_menu->setPosition({0.f, 0.f}); m_content->addChild(m_menu);
-        static char const* names[5] = { "Bot", "Converter", "Player", "Visual", "Render" };
+        
+        // REMOVED "Converter" and "Render"
+        static char const* names[4] = { "Bot", "Player", "Visual", "Settings" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt"); head->setScale(0.5f); head->setColor(kBlue); head->setPosition({80.f, 112.f}); m_content->addChild(head);
         m_y = 70.f;
         
-        if (tab == 0) {
+        if (tab == 0) { // Bot
             makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "RECORD", kBtn); m_y -= 35.f;
             makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_PLAY, 80.f, m_y, 200.f, 25.f, "PLAYBACK", kBtn); m_y -= 35.f;
             makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_STEPPER, 80.f, m_y, 200.f, 25.f, "FRAME STEPPER", kBtn); m_y -= 35.f;
@@ -61,10 +65,15 @@ public:
             makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_DN, 20.f, m_y, 30.f, 25.f, "-", kBtn);
             makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_TPS_UP, 140.f, m_y, 30.f, 25.f, "+", kBtn);
             auto l = CCLabelBMFont::create("240", "bigFont.fnt"); l->setScale(0.4f); l->setPosition({80.f, m_y}); l->setTag(L_TPS); m_content->addChild(l);
-        } else if (tab == 2) { // Player
+        } 
+        else if (tab == 1) { // Player
             makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "NOCLIP", kBtn);
-        } else if (tab == 3) { // Visual
+        } 
+        else if (tab == 2) { // Visual
             makeBtn(m_menu, menu_selector(CkyPanel::onToggle), T_REC, 80.f, m_y, 200.f, 25.f, "SHOW HITBOXES", kBtn);
+        }
+        else if (tab == 3) { // Settings
+            makeBtn(m_menu, menu_selector(CkyPanel::onBtn), B_SAVE, 80.f, m_y, 200.f, 25.f, "GPL-3.0 LICENSE", kBtn);
         }
     }
 
