@@ -2,7 +2,8 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CCMenuItemToggler.hpp>
 
-class CkyPanel : public cocos2d::CCNode {
+// Changed from CCNode to CCLayer
+class CkyPanel : public cocos2d::CCLayer {
 public:
     cocos2d::CCPoint m_originalPos;
 
@@ -13,7 +14,7 @@ public:
     }
 
     bool init() override {
-        if (!CCNode::init()) return false;
+        if (!CCLayer::init()) return false;
         
         this->setID("cky-panel");
 
@@ -21,8 +22,9 @@ public:
         auto savedY = geode::Mod::get()->getSavedValue<float>("panel_y", 160.f);
         this->setPosition({savedX, savedY}); 
 
-        // Enable touches for this node
+        // CCLayer HAS this function!
         this->setTouchEnabled(true);
+        this->setTouchMode(cocos2d::kCCTouchesOneByOne);
 
         auto bg = cocos2d::extension::CCScale9Sprite::create("GJ_square01.png");
         bg->setContentSize({180.f, 260.f});
@@ -56,7 +58,6 @@ public:
         return true;
     }
 
-    // --- TOUCH EVENTS ---
     bool onTouchBegan(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override {
         auto touchPos = this->convertToNodeSpace(touch->getLocation());
         auto size = cocos2d::CCSize(180.f, 260.f);
