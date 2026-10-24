@@ -34,7 +34,6 @@ jobs:
           combine: true
           target: ${{ matrix.config.target }}
           sdk: v5.11.2
-          gd-version: 2.2081
 
   package:
     name: Package builds
