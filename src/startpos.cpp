@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <vector>
 #include <Geode/binding/CCMenuItemSpriteExtra.hpp>
-
+// skybender RAWRRR
 class CkySpSwitcher : public cocos2d::CCNode {
     std::vector<geode::Ref<StartPosObject>> m_pos; cocos2d::CCLabelBMFont* m_label = nullptr; int m_idx = -1; 
 public:
@@ -31,10 +31,5 @@ namespace cky {
         std::sort(found.begin(), found.end(), [](StartPosObject* a, StartPosObject* b) { return a->getPositionX() < b->getPositionX(); });
         if (auto node = CkySpSwitcher::create(found)) pl->m_uiLayer->addChild(node, 10);
     }
-
-    void ckySetStartPosVisible(bool on) {
-        auto pl = PlayLayer::get();
-        if (!pl || !pl->m_uiLayer) return;
-        if (auto n = pl->m_uiLayer->getChildByID("cky-startpos")) n->setVisible(on);
-    }
+    void ckySetStartPosVisible(bool on) {}
 }
