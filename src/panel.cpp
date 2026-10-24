@@ -1,4 +1,5 @@
 #include "state.hpp"
+#include <Geode/cocos/include/CCTouchDispatcher.h>
 #include <Geode/utils/web.hpp>
 #include <Geode/binding/CCMenuItemToggler.hpp>
 
