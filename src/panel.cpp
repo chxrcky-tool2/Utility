@@ -13,7 +13,6 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-panel");
-        // Positioned on the left side of the screen
         this->setPosition({40.f, 160.f}); 
 
         auto bg = cocos2d::extension::CCScale9Sprite::create("GJ_square01.png");
@@ -21,27 +20,27 @@ public:
         bg->setOpacity(220);
         this->addChild(bg);
 
-        // Center the menu inside the background
+        // Menu only holds the toggles now, positioned perfectly in the center
         auto menu = cocos2d::CCMenu::create();
-        menu->setPosition({90.f, 130.f}); 
+        menu->setPosition({80.f, 130.f}); 
         this->addChild(menu);
 
         auto mkToggle = [&](const char* text, bool* stateVar, float yPos) {
-            auto label = cocos2d::CCLabelBMFont::create(text, "bigFont.fnt");
-            label->setScale(0.35f);
-            
+            // 1. Create the toggle
             auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(CkyPanel::onToggle), 0.6f);
-            // Move toggle to the left, label to the right
-            toggler->setPosition({-45.f, yPos});
+            toggler->setPosition({-20.f, yPos}); // Position inside the menu
             toggler->setTag(reinterpret_cast<intptr_t>(stateVar)); 
             toggler->toggle(*stateVar); 
             menu->addChild(toggler);
             
-            label->setPosition({20.f, yPos});
-            menu->addChild(label);
+            // 2. Create the text and add it DIRECTLY to the panel, not the menu
+            auto label = cocos2d::CCLabelBMFont::create(text, "bigFont.fnt");
+            label->setScale(0.35f);
+            label->setAnchorPoint({0.f, 0.5f});
+            label->setPosition({25.f, 130.f + yPos}); // Offset relative to the panel
+            this->addChild(label);
         };
 
-        // Y positions spaced out evenly
         mkToggle("Noclip", &cky::noclip, 90.f);
         mkToggle("Record", &cky::recording, 45.f);
         mkToggle("Play", &cky::playing, 0.f);
