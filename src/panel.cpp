@@ -1,5 +1,4 @@
 #include "state.hpp"
-#include <Geode/binding/CCMenuItemToggler.hpp>
 
 class CkyPanel : public cocos2d::CCLayer {
 public:
@@ -24,21 +23,12 @@ public:
         closeBtn->setPosition({200.f, 115.f});
         this->addChild(closeMenu);
 
-        auto menu = cocos2d::CCMenu::create();
-        menu->setPosition({0.f, 0.f});
-        this->addChild(menu);
-        
-        auto lbl = cocos2d::CCLabelBMFont::create("RECORD", "bigFont.fnt");
-        lbl->setScale(0.4f);
-        auto btn = CCMenuItemSpriteExtra::create(lbl, this, menu_selector(CkyPanel::onToggle));
-        btn->setPosition({0.f, 40.f});
-        menu->addChild(btn);
-
         return true;
     }
 
-    void onToggle(cocos2d::CCObject*) { cky::recording = !cky::recording; }
-    void onClose(cocos2d::CCObject*) { this->setVisible(false); }
+    void onClose(cocos2d::CCObject*) { 
+        this->setVisible(false); 
+    }
 };
 
 namespace cky {
