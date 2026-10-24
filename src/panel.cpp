@@ -13,6 +13,7 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-panel");
+        // Positioned on the left side of the screen
         this->setPosition({40.f, 160.f}); 
 
         auto bg = cocos2d::extension::CCScale9Sprite::create("GJ_square01.png");
@@ -20,6 +21,7 @@ public:
         bg->setOpacity(220);
         this->addChild(bg);
 
+        // Center the menu inside the background
         auto menu = cocos2d::CCMenu::create();
         menu->setPosition({90.f, 130.f}); 
         this->addChild(menu);
@@ -29,30 +31,22 @@ public:
             label->setScale(0.35f);
             
             auto toggler = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(CkyPanel::onToggle), 0.6f);
-            toggler->setPosition({-40.f, yPos});
+            // Move toggle to the left, label to the right
+            toggler->setPosition({-45.f, yPos});
             toggler->setTag(reinterpret_cast<intptr_t>(stateVar)); 
             toggler->toggle(*stateVar); 
             menu->addChild(toggler);
             
-            label->setPosition({15.f, yPos});
+            label->setPosition({20.f, yPos});
             menu->addChild(label);
         };
 
-        // Spaced out so they all fit inside the box
-        mkToggle("Noclip", &cky::noclip, 80.f);
-        mkToggle("Record", &cky::recording, 40.f);
+        // Y positions spaced out evenly
+        mkToggle("Noclip", &cky::noclip, 90.f);
+        mkToggle("Record", &cky::recording, 45.f);
         mkToggle("Play", &cky::playing, 0.f);
-        mkToggle("Auto Clicker", &cky::autoClicker, -40.f);
-        mkToggle("Clickbot", &cky::clickbotSounds, -80.f);
-
-        auto licenseBtn = cocos2d::CCMenuItemLabel::create(
-            cocos2d::CCLabelBMFont::create("GPL-3.0", "bigFont.fnt"),
-            this, menu_selector(CkyPanel::onLicense)
-        );
-        licenseBtn->setScale(0.3f);
-        licenseBtn->setOpacity(153);
-        licenseBtn->setPosition({0.f, -115.f});
-        menu->addChild(licenseBtn);
+        mkToggle("Auto Clicker", &cky::autoClicker, -45.f);
+        mkToggle("Clickbot", &cky::clickbotSounds, -90.f);
 
         return true;
     }
@@ -63,10 +57,6 @@ public:
             bool* stateVar = reinterpret_cast<bool*>(toggler->getTag());
             if (stateVar) *stateVar = !(*stateVar);
         }
-    }
-
-    void onLicense(cocos2d::CCObject*) {
-        geode::createQuickPopup("License", "Licensed under GPL-3.0.\nYou cannot make this closed source.", "OK", nullptr, nullptr);
     }
 };
 
