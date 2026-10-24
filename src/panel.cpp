@@ -1,7 +1,8 @@
 #include "state.hpp"
 #include <Geode/Geode.hpp>
 #include <Geode/binding/CCMenuItemToggler.hpp>
-#include <Geode/utils/file.hpp>
+#include <Geode/cocos/include/CCTouchDispatcher.h>
+#include <Geode/cocos/layers_scenes_transitions_nodes/CCLayer.h>
 
 class CkyPanel : public cocos2d::CCNode {
 public:
@@ -16,17 +17,18 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         
-        // 1. The Node ID
+        // 1. NODE ID: This ensures we never spawn duplicates
         this->setID("cky-panel");
 
-        // 2. Load saved position from Geode settings, or default to {40, 160}
+        // 2. MEMORY: Load saved position or default to left side
         auto savedX = geode::Mod::get()->getSavedValue<float>("panel_x", 40.f);
         auto savedY = geode::Mod::get()->getSavedValue<float>("panel_y", 160.f);
         this->setPosition({savedX, savedY}); 
 
-        // 3. Make it draggable!
+        // 3. DRAGGABLE: The GDH-style touch listener
         auto dragListener = cocos2d::CCEventListenerTouchOneByOne::create();
         dragListener->setSwallowTouches(true);
+        
         dragListener->onTouchBegan = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
             auto touchPos = this->convertToNodeSpace(touch->getLocation());
             auto size = cocos2d::CCSize(180.f, 260.f);
@@ -36,24 +38,27 @@ public:
             }
             return false;
         };
+        
         dragListener->onTouchMoved = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
             this->setPosition(touch->getLocation() + m_originalPos);
         };
+        
         dragListener->onTouchEnded = [this](cocos2d::CCTouch* touch, cocos2d::CCEvent* event) {
-            // 4. Save the new position!
+            // Save the new position!
             geode::Mod::get()->setSavedValue<float>("panel_x", this->getPositionX());
             geode::Mod::get()->setSavedValue<float>("panel_y", this->getPositionY());
         };
+        
         cocos2d::CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(dragListener, 0, true);
         dragListener->autorelease();
 
-        // The Background
+        // Background
         auto bg = cocos2d::extension::CCScale9Sprite::create("GJ_square01.png");
         bg->setContentSize({180.f, 260.f});
         bg->setOpacity(220);
         this->addChild(bg);
 
-        // The Menu
+        // Menu (Only holds toggles)
         auto menu = cocos2d::CCMenu::create();
         menu->setPosition({60.f, 130.f}); 
         this->addChild(menu);
@@ -92,9 +97,12 @@ public:
 
 void ckyBuildPanel(PlayLayer* pl) {
     if (!pl || !pl->m_uiLayer) return;
+    
+    // NODE ID CHECK: This is the magic line. It prevents the crash.
     if (pl->m_uiLayer->getChildByID("cky-panel")) return;
+    
     if (auto panel = CkyPanel::create()) {
-        // Set Z-Order to 100 so it sits on top of the game, but below the pause menu (which is usually 1000+)
+        // Z-Order 100 puts it above the game but below pause menus
         pl->m_uiLayer->addChild(panel, 100); 
     }
 }
