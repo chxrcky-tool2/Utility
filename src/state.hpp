@@ -32,6 +32,8 @@ void ckyTelemetryPress();
 void ckyTelemetryReset();
 void ckyClickSound(bool down, bool isPlayer1);
 void ckyClickRescan();
+std::string ckyClickPackName();
+void ckyClickPackStep(int dir);
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -82,6 +84,7 @@ namespace cky {
     inline bool     overlayOn = true;
     inline bool     clickHudOn = true;
     inline bool     clickbotOn = false;
+    inline int      clickPack = 0;
     inline uint32_t clicksTotal = 0;
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
