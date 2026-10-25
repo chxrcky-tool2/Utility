@@ -46,5 +46,15 @@ namespace cky {
             host->addChild(newP, 2000);
         }
     }
+    
+    // Defining the missing functions here so main.cpp doesn't crash
     void ckyBuildPanel(PlayLayer* pl) { ckyOpenPanel(pl->m_uiLayer); }
+    void ckyBuildHud(PlayLayer* pl) {}
+    void ckyBuildStartPos(PlayLayer* pl) {}
+    void ckyHudRefresh() {}
+    void ckyApplyHudScale() {}
+    bool save() { return true; }
+    bool load() { return true; }
+    void clearMacro() {}
+    void ckyNotify(std::string const& msg, bool success) {}
 }
