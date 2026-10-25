@@ -1,7 +1,7 @@
 #include "state.hpp"
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
-#include <Amber.hpp>
+#include <fryy_55.amber/include/Amber.hpp>
 
 using namespace amber;
 
@@ -9,7 +9,6 @@ class $modify(CkyMenuLayer, MenuLayer) {
     bool init() {
         if (!MenuLayer::init()) return false;
         
-        // Delay to let Amber load
         this->scheduleOnce(schedule_selector(CkyMenuLayer::addBtn), 0.5f);
         return true;
     }
