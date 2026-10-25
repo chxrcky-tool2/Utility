@@ -1,4 +1,5 @@
 #include "state.hpp"
+#include <Geode/binding/CCMenuItemToggler.hpp>
 
 class CkyPanel : public cocos2d::CCLayer {
 public:
@@ -30,31 +31,3 @@ public:
         this->setVisible(false); 
     }
 };
-
-namespace cky {
-    void ckyOpenPanel(CCNode* host) {
-        if (!host) return;
-        auto p = host->getChildByID("cky-panel");
-        if (p) {
-            p->setVisible(!p->isVisible());
-            return;
-        }
-        auto newP = CkyPanel::create(); 
-        if (newP) {
-            auto win = cocos2d::CCDirector::get()->getWinSize();
-            newP->setPosition({win.width / 2.f, win.height / 2.f});
-            host->addChild(newP, 2000);
-        }
-    }
-    
-    // Defining the missing functions here so main.cpp doesn't crash
-    void ckyBuildPanel(PlayLayer* pl) { ckyOpenPanel(pl->m_uiLayer); }
-    void ckyBuildHud(PlayLayer* pl) {}
-    void ckyBuildStartPos(PlayLayer* pl) {}
-    void ckyHudRefresh() {}
-    void ckyApplyHudScale() {}
-    bool save() { return true; }
-    bool load() { return true; }
-    void clearMacro() {}
-    void ckyNotify(std::string const& msg, bool success) {}
-}
