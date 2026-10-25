@@ -570,6 +570,10 @@ public:
                 if (auto ic = m_host->getChildByID("cky-icon")) ic->setPosition(ckyDefaultIconPos());
             }
             break;
+        case B_PACK_DN:
+        case B_PACK_UP:
+            ckyClickPackStep(t == B_PACK_UP ? 1 : -1);
+            break;
         case B_LICENSE:
             web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;
