@@ -31,3 +31,25 @@ public:
         this->setVisible(false); 
     }
 };
+
+// Define all the missing functions the linker is screaming about here
+namespace cky {
+    void ckyOpenPanel(CCNode* host) {
+        if (!host) return;
+        auto p = host->getChildByID("cky-panel");
+        if (p) {
+            p->setVisible(!p->isVisible());
+            return;
+        }
+        auto newP = CkyPanel::create(); 
+        if (newP) {
+            auto win = cocos2d::CCDirector::get()->getWinSize();
+            newP->setPosition({win.width / 2.f, win.height / 2.f});
+            host->addChild(newP, 2000);
+        }
+    }
+    
+    void ckyBuildPanel(PlayLayer* pl) { ckyOpenPanel(pl->m_uiLayer); }
+    void ckyBuildHud(PlayLayer* pl) {}
+    void ckyBuildStartPos(PlayLayer* pl) {}
+}
