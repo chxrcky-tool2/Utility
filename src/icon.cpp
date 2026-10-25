@@ -1,7 +1,7 @@
 #include "state.hpp"
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
-#include <fryy_55.amber/include/Amber.hpp>
+#include <Amber.hpp>
 
 using namespace amber;
 
