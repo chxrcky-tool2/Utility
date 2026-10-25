@@ -115,9 +115,10 @@ namespace cky {
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
     inline float effSpeed() { return speedOn ? speed : 1.f; }
-
+    
+    // macros count raw physics steps, so playback matches the recording this sucks bro
     inline double clockInc() {
-        return static_cast<double>(macroTps) / static_cast<double>(effTps());
+        return 1.0;
     }
 
     inline bool cheating() {
