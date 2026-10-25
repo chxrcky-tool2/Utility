@@ -3,6 +3,7 @@
     "name": "ChxrCky",
     "developer": "ChxrCky",
     "version": "1.0.3",
+    "description": "A lightweight, standalone automation and input-replay engine.",
     "geode": "5.11.2",
     "gd": {
         "android": "2.2081",
