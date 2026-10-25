@@ -222,8 +222,7 @@ public:
         int t = static_cast<CCNode*>(s)->getTag();
         m_off = std::clamp(m_off + (t == S_DN ? ROW : -ROW), 0.f, m_maxOff);
         applyScroll();
-    }
-
+}
     // ---- build ----
     bool init() override {
         if (!CCNode::init()) return false;
@@ -565,17 +564,18 @@ public:
             }
             break;
         case B_RESETPOS:
-            cky::savePos("cky-icon", CCPoint(-99999.f, -99999.f));
+            cky::savePos("icon", CCPoint(-99999.f, -99999.f));
             if (m_host) {
                 if (auto ic = m_host->getChildByID("cky-icon")) ic->setPosition(ckyDefaultIconPos());
             }
+            ckyNotify("Icon position reset");
+            break;
+        case B_LICENSE:
+            utils::web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;
         case B_PACK_DN:
         case B_PACK_UP:
             ckyClickPackStep(t == B_PACK_UP ? 1 : -1);
-            break;
-        case B_LICENSE:
-            web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;
         default: break;
         }
@@ -586,9 +586,7 @@ public:
 
 void ckyOpenPanel(CCNode* host) {
     if (!host || host->getChildByID("cky-panel")) return;
-    auto p = CkyPanel::create();
-    if (!p) return;
-    p->attachTo(host);
+    if (auto p = CkyPanel::create()) p->attachTo(host);
 }
 
 // END OF FILE (panel.cpp)
