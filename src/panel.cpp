@@ -431,7 +431,7 @@ public:
                 cky::playArmed = false;
                 cky::macroTps = cky::effTps();
                 cky::recArmed = (cky::step == 0);
-                if (!cky::recArmed) ckyNotify("Recording starts when you restart the level");
+                if (!cky::recArmed) ckyNotify("Recording will start when you restart the level");
             }
             break;
         case T_PLAY:
@@ -447,6 +447,11 @@ public:
                 cky::cursor = 0;
                 cky::playArmed = (cky::step == 0);
                 if (!cky::playArmed) ckyNotify("Playback ON: restart the level to start it");
+                
+                if (std::abs(cky::macroTps - cky::effTps()) > 0.5f) {
+                    ckyNotify(fmt::format("Macro was recorded at {} TPS, you're at {}",
+                        static_cast<int>(cky::macroTps), static_cast<int>(cky::effTps())).c_str(), false);
+                                }
             }
             break;
         case T_STEPPER:
