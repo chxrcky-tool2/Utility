@@ -26,6 +26,12 @@ void ckyAddIcon(CCNode* host);
 void ckyOpenPanel(CCNode* host);
 void ckySetStartPosVisible(bool on);
 void ckyBuildStartPos(PlayLayer* pl);
+void ckyBuildOverlay(PlayLayer* pl);
+void ckyOverlayShow(std::string const& text, bool good = true);
+void ckyTelemetryPress();
+void ckyTelemetryReset();
+void ckyClickSound(bool down, bool isPlayer1);
+void ckyClickRescan();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -73,6 +79,11 @@ namespace cky {
     inline bool     dirty = false;
     inline bool     hitboxes = false;
     inline bool     startPosOn = true;
+    inline bool     overlayOn = true;
+    inline bool     clickHudOn = true;
+    inline bool     clickbotOn = false;
+    inline uint32_t clicksTotal = 0;
+    inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
 
     inline bool     ncShowAcc = true;
@@ -219,9 +230,27 @@ namespace cky {
         if (std::filesystem::is_directory(dir, ec)) return dir;
         return Mod::get()->getSaveDir();
     }
+    
+    inline std::string levelNameSafe() {
+        std::string out;
+        if (auto pl = PlayLayer::get()) {
+            if (pl->m_level) {
+                std::string raw = pl->m_level->m_levelName.c_str();
+                for (char c : raw) {
+                    out += (std::isalnum(static_cast<unsigned char>(c)) ? c : '_');
+                }
+            }
+        }
+        if (out.empty()) out = "level";
+        if (out.size() > 40) out.resize(40);
+        return out;
+    }
 
+    // e.g. Stereo_Madness_1_slot1.cky
     inline std::filesystem::path slotPath() {
-        return macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
+        return macroDir() / fmt::format("{}_{}_slot{}.cky", levelNameSafe(), levelId(), slot);
+    }
+    
     }
 
     inline bool slotExists() {
@@ -246,6 +275,12 @@ namespace cky {
     inline bool load() {
         auto p = slotPath();
         std::error_code ec;
+                if (!std::filesystem::exists(p, ec)) {
+            auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
+            if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
+                
+        }
+        
         // slot 1 also picks up macros saved by older versions
         if (!std::filesystem::exists(p, ec) && slot == 1) {
             auto old = Mod::get()->getSaveDir() / fmt::format("macro_{}.cky", levelId());
