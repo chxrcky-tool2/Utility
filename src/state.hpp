@@ -204,8 +204,7 @@ namespace cky {
     inline void savePos(std::string const& key, CCPoint p) {
         Mod::get()->setSavedValue<float>(key + "-x", p.x);
         Mod::get()->setSavedValue<float>(key + "-y", p.y);
-    }
-
+}
     // ---- file helpers ----
     template <class T>
     inline void wr(std::ofstream& f, T v) {
@@ -233,7 +232,7 @@ namespace cky {
         if (std::filesystem::is_directory(dir, ec)) return dir;
         return Mod::get()->getSaveDir();
     }
-    
+
     inline std::string levelNameSafe() {
         std::string out;
         if (auto pl = PlayLayer::get()) {
@@ -252,8 +251,6 @@ namespace cky {
     // e.g. Stereo_Madness_1_slot1.cky
     inline std::filesystem::path slotPath() {
         return macroDir() / fmt::format("{}_{}_slot{}.cky", levelNameSafe(), levelId(), slot);
-    }
-    
     }
 
     inline bool slotExists() {
@@ -278,12 +275,11 @@ namespace cky {
     inline bool load() {
         auto p = slotPath();
         std::error_code ec;
-                if (!std::filesystem::exists(p, ec)) {
+        if (!std::filesystem::exists(p, ec)) {
             auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
             if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
-                
         }
-        
+
         // slot 1 also picks up macros saved by older versions
         if (!std::filesystem::exists(p, ec) && slot == 1) {
             auto old = Mod::get()->getSaveDir() / fmt::format("macro_{}.cky", levelId());
@@ -322,7 +318,7 @@ namespace cky {
         cursor = 0;
         return true;
     }
-}
+} // end namespace cky
 
 // ---------- shared helpers ----------
 inline void ckyNotify(char const* text, bool ok = true) {
