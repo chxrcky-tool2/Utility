@@ -3,14 +3,36 @@
 #include <Geode/utils/web.hpp>
 
 namespace {
-    ccColor3B const kCard   = ccc3(22, 24, 40);
-    ccColor3B const kSide   = ccc3(14, 15, 28);
-    ccColor3B const kTab    = ccc3(30, 34, 60);
-    ccColor3B const kOff    = ccc3(62, 66, 90);
-    ccColor3B const kOn     = ccc3(60, 200, 120);
-    ccColor3B const kAccent = ccc3(60, 130, 255);
-    ccColor3B const kBtn    = ccc3(45, 52, 88);
+        struct Theme {
+        ccColor3B card, side, tab, off, on, accent, btn, title;
+        ccColor4B top, bottom;
+        char const* name;
+    };
 
+    Theme const kThemes[] = {
+        { ccc3(22,24,40), ccc3(14,15,28), ccc3(30,34,60), ccc3(62,66,90), ccc3(60,200,120),
+          ccc3(60,130,255), ccc3(45,52,88), ccc3(120,210,255),
+          ccc4(255,120,190,255), ccc4(225,25,50,255), "Neon" },
+        { ccc3(12,28,44), ccc3(8,20,34), ccc3(20,46,70), ccc3(50,70,92), ccc3(40,200,170),
+          ccc3(40,150,255), ccc3(28,60,92), ccc3(130,230,255),
+          ccc4(60,170,255,255), ccc4(20,60,160,255), "Ocean" },
+        { ccc3(18,32,24), ccc3(12,24,18), ccc3(28,50,36), ccc3(58,76,64), ccc3(110,210,90),
+          ccc3(60,170,110), ccc3(34,62,44), ccc3(170,240,150),
+          ccc4(120,220,120,255), ccc4(20,110,70,255), "Forest" },
+        { ccc3(38,22,30), ccc3(28,14,22), ccc3(60,34,44), ccc3(88,62,70), ccc3(255,170,60),
+          ccc3(255,100,90), ccc3(74,40,52), ccc3(255,200,140),
+          ccc4(255,190,70,255), ccc4(220,50,90,255), "Sunset" },
+        { ccc3(24,24,26), ccc3(16,16,18), ccc3(40,40,44), ccc3(70,70,76), ccc3(200,200,206),
+          ccc3(130,130,140), ccc3(52,52,58), ccc3(230,230,235),
+          ccc4(200,200,206,255), ccc4(70,70,76,255), "Mono" },
+    };
+
+    Theme const& thm() {
+        int n = static_cast<int>(sizeof(kThemes) / sizeof(kThemes[0]));
+        return kThemes[std::clamp(cky::theme, 0, n - 1)];
+    }
+
+    int g_startTab = 0;
     enum : int {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO, T_FPS,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
