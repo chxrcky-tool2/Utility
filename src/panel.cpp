@@ -46,7 +46,7 @@ namespace {
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_SPD_DN, B_SPD_UP, B_FPS_DN, B_FPS_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT, B_THEME_DN, B_THEME_UP,
-        L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK,
+        L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK, L_THEME,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -260,7 +260,7 @@ public:
         float W = 440.f, H = 270.f;
 
         // pink -> red gradient frame
-        auto frame = CCLayerGradient::create(thm().top, thm().bottom)
+        auto frame = CCLayerGradient::create(thm().top, thm().bottom);
         frame->setContentSize({W, H});
         frame->setVector({0.f, -1.f});
         frame->ignoreAnchorPointForPosition(false);
