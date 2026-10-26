@@ -34,6 +34,7 @@ void ckyClickSound(bool down, bool isPlayer1);
 void ckyClickRescan();
 std::string ckyClickPackName();
 void ckyClickPackStep(int dir);
+bool ckyImportGdr();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
