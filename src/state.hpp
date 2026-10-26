@@ -86,6 +86,7 @@ namespace cky {
     inline bool     clickHudOn = true;
     inline bool     clickbotOn = false;
     inline int      clickPack = 0;
+    inline int      theme = 0;
     inline uint32_t clicksTotal = 0;
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
