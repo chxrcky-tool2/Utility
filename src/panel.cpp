@@ -33,12 +33,19 @@ namespace {
     }
 
     int g_startTab = 0;
+#define kCard   (thm().card)
+#define kSide   (thm().side)
+#define kTab    (thm().tab)
+#define kOff    (thm().off)
+#define kOn     (thm().on)
+#define kAccent (thm().accent)
+#define kBtn    (thm().btn)
     enum : int {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO, T_FPS,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_SPD_DN, B_SPD_UP, B_FPS_DN, B_FPS_UP, B_HUDSZ_DN, B_HUDSZ_UP,
-        B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP,
+        B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT, B_THEME_DN, B_THEME_UP,
         L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
@@ -249,10 +256,11 @@ public:
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-panel");
+        cky::theme = Mod::get()->getSavedValue<int>("theme", 0);
         float W = 440.f, H = 270.f;
 
         // pink -> red gradient frame
-        auto frame = CCLayerGradient::create(ccc4(255, 120, 190, 255), ccc4(225, 25, 50, 255));
+        auto frame = CCLayerGradient::create(thm().top, thm().bottom)
         frame->setContentSize({W, H});
         frame->setVector({0.f, -1.f});
         frame->ignoreAnchorPointForPosition(false);
@@ -301,7 +309,8 @@ public:
         closeMenu->addChild(closeBtn);
         this->addChild(closeMenu, 4);
 
-        buildTab(0);
+        buildTab(g_startTab);
+        g_startTab = 0;
         return true;
     }
 
@@ -343,6 +352,7 @@ public:
             rowValue("Macro slot", B_SLOT_DN, B_SLOT_UP, L_SLOT);
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
             rowWide("Clear macro", B_CLEAR);
+            rowWide("Import GDR file", B_IMPORT);
             rowInfo(L_INFO);
             rowInfo(L_INFO2);
             rowInfo(L_INFO3);
@@ -373,7 +383,8 @@ public:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
-            rowText("ChxrCky Macro Bot v1.0.2");
+            rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
+            rowText("ChxrCky Macro Bot v1.0.3");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
@@ -424,7 +435,8 @@ public:
         setText(L_INFO2, fmt::format("Macro TPS: {}", static_cast<int>(cky::macroTps)));
         setText(L_INFO3, fmt::format("Slot {}: {}", cky::slot,
             cky::slotExists() ? "saved" : "empty"));
-
+            
+        setText(L_THEME, thm().name);
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))
             : std::string("High TPS: OFF (tap to cycle)"));
@@ -597,6 +609,20 @@ public:
             }
             ckyNotify("Icon position reset");
             break;
+        case B_IMPORT:
+            ckyImportGdr();
+            break;
+        case B_THEME_DN:
+        case B_THEME_UP: {
+            int n = static_cast<int>(sizeof(kThemes) / sizeof(kThemes[0]));
+            cky::theme = ((cky::theme + (t == B_THEME_UP ? 1 : -1)) % n + n) % n;
+            Mod::get()->setSavedValue<int>("theme", cky::theme);
+            g_startTab = m_tab;
+            auto host = m_host;
+            this->onClose(nullptr);
+            ckyOpenPanel(host);
+            return;
+        }
         case B_LICENSE:
             utils::web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;
