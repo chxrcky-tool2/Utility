@@ -1,4 +1,4 @@
-// clickbot.cpp — clickpack loader + click sounds
+// clickbot.cpp — ZCB-style clickpack loader + click sounds
 // packs live in <game dir>/clicks/<PackName>/player1/{clicks,releases,softclicks,...}
 #include "state.hpp"
 #include <random>
