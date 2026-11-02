@@ -66,8 +66,16 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
 
             // playback only runs after a level restart (armed), so timing starts at frame 0
             if (cky::playing && cky::playArmed) {
-                double now = cky::frameClock;
+                double now = cky::frameClock - static_cast<double>(cky::frameOffset);
                 cky::injecting = true;
+                if (cky::holdFixPending) {
+                    for (int i = 0; i < 0x200; ++i) {
+                        if (cky::holdFix[i]) {
+                            GJBaseGameLayer::handleButton(true, i & 0xFF, (i & cky::P2_FLAG) == 0);
+                        }
+                    }
+                    cky::holdFixPending = false;
+                }
                 while (cky::cursor < cky::macro.size()) {
                     MacroInput const& in = cky::macro[cky::cursor];
                     if (static_cast<double>(in.frame) > now) break;
@@ -106,6 +114,9 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         if (PlayLayer::get()) {
             if (cky::playing && !cky::injecting) return;
 
+            if (down) ckyTelemetryPress();
+            ckyClickSound(down, isPlayer1);
+
             // recording only runs after a level restart (armed)
             if (cky::recording && cky::recArmed && !cky::injecting) {
                 MacroInput entry;
@@ -113,6 +124,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 entry.isPress = down;
                 entry.playerButton = button | (isPlayer1 ? 0 : cky::P2_FLAG);
                 cky::macro.push_back(entry);
+                ckyOverlayShow(fmt::format("Input {} ({})",
+                    cky::macro.size(), down ? "press" : "release"));
             }
         }
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
@@ -135,18 +148,23 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::ncReset();
         ckyBuildHud(this);
         ckyBuildStartPos(this);
+        ckyBuildOverlay(this);
         ckyApplyAudio();
         ckyApplyHitboxes();
     }
 
     void resetLevel() {
-        // practice mode: resume from the last checkpoint instead of wiping the macro
-        bool resume = false;
+        // practice mode: resume from the last checkpoint instead of restarting from zero
+        bool resume = false;      // recording resumes at the checkpoint
+        bool resumePlay = false;  // playback resumes at the checkpoint
         cky::Cp cp{};
-        if (cky::recording && cky::recArmed && m_isPracticeMode && m_checkpointArray
-            && m_checkpointArray->count() > 0
-            && !cky::ckpts.empty() && cky::ckpts.back().valid) {
+        bool cpOk = m_isPracticeMode && m_checkpointArray && m_checkpointArray->count() > 0
+            && !cky::ckpts.empty() && cky::ckpts.back().valid;
+        if (cpOk && cky::recording && cky::recArmed) {
             resume = true;
+            cp = cky::ckpts.back();
+        } else if (cpOk && cky::playing && cky::playArmed) {
+            resumePlay = true;
             cp = cky::ckpts.back();
         }
 
@@ -155,10 +173,11 @@ class $modify(CkyPlayLayer, PlayLayer) {
         if (resume) {
             size_t before = cky::macro.size();
             cky::rewindTo(cp);
-            if (cky::ckptTelemetry) {
-                ckyNotify(fmt::format("restarted from {} to {}",
-                    before, cky::macro.size()).c_str());
-            }
+            ckyOverlayShow(fmt::format("Going back to {} inputs from {} inputs.",
+                cky::macro.size(), before), false);
+        } else if (resumePlay) {
+            cky::rewindPlaybackTo(cp);
+            ckyOverlayShow(fmt::format("Playback back to step {}", cp.step), false);
         } else {
             cky::step = 0;
             cky::frameClock = 0.0;
@@ -166,6 +185,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
             cky::ckpts.clear();
             cky::cpInit = false;
             cky::ncReset();
+            ckyTelemetryReset();
             if (cky::recording) {
                 if (cky::ckptTelemetry && !cky::macro.empty()) {
                     ckyNotify("No valid checkpoint: macro cleared", false);
@@ -196,6 +216,12 @@ class $modify(CkyPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        // auto-stop: recording ends when you reach the end of the level
+        if (cky::recording) {
+            cky::recording = false;
+            cky::recArmed = false;
+            ckyNotify(fmt::format("Recording stopped: {} inputs", cky::macro.size()).c_str());
+        }
         if (cky::safeMode && (cky::dirty || cky::cheating())) {
             ckyNotify("Safe mode: completion blocked", false);
             this->resetLevel();
