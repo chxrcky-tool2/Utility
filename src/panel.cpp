@@ -1,9 +1,9 @@
-// panel.cpp — GDH-style menu: tab sidebar, black-outlined ON/OFF pills, +/- values, scrolling rows
+// panel.cpp — GDH-style menu: themes, tab sidebar, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace {
-        struct Theme {
+    struct Theme {
         ccColor3B card, side, tab, off, on, accent, btn, title;
         ccColor4B top, bottom;
         char const* name;
@@ -33,6 +33,7 @@ namespace {
     }
 
     int g_startTab = 0;
+
 #define kCard   (thm().card)
 #define kSide   (thm().side)
 #define kTab    (thm().tab)
@@ -40,13 +41,16 @@ namespace {
 #define kOn     (thm().on)
 #define kAccent (thm().accent)
 #define kBtn    (thm().btn)
+
     enum : int {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO, T_FPS,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
+        T_OVERLAY, T_CLICKHUD, T_CLICKBOT,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_SPD_DN, B_SPD_UP, B_FPS_DN, B_FPS_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT, B_THEME_DN, B_THEME_UP,
-        L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK, L_THEME,
+        B_OFF_DN, B_OFF_UP,
+        L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK, L_THEME, L_OFF,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -251,7 +255,8 @@ public:
         int t = static_cast<CCNode*>(s)->getTag();
         m_off = std::clamp(m_off + (t == S_DN ? ROW : -ROW), 0.f, m_maxOff);
         applyScroll();
-}
+    }
+
     // ---- build ----
     bool init() override {
         if (!CCNode::init()) return false;
@@ -259,7 +264,6 @@ public:
         cky::theme = Mod::get()->getSavedValue<int>("theme", 0);
         float W = 440.f, H = 270.f;
 
-        // pink -> red gradient frame
         auto frame = CCLayerGradient::create(thm().top, thm().bottom);
         frame->setContentSize({W, H});
         frame->setVector({0.f, -1.f});
@@ -281,7 +285,7 @@ public:
 
         auto title = CCLabelBMFont::create("ChxrCky", "bigFont.fnt");
         title->setScale(0.55f);
-        title->setColor(ccc3(120, 210, 255));
+        title->setColor(thm().title);
         title->setPosition({-149.f, 108.f});
         this->addChild(title, 3);
 
@@ -337,7 +341,7 @@ public:
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
-        head->setColor(ccc3(120, 210, 255));
+        head->setColor(thm().title);
         head->setPosition({-72.f, 112.f});
         m_content->addChild(head);
 
@@ -353,6 +357,7 @@ public:
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
             rowWide("Clear macro", B_CLEAR);
             rowWide("Import GDR file", B_IMPORT);
+            rowValue("Input offset", B_OFF_DN, B_OFF_UP, L_OFF);
             rowInfo(L_INFO);
             rowInfo(L_INFO2);
             rowInfo(L_INFO3);
@@ -378,13 +383,17 @@ public:
             rowPill("HUD", T_HUD);
             rowValue("HUD size", B_HUDSZ_DN, B_HUDSZ_UP, L_HUDSZ);
             rowPill("StartPos switcher", T_STARTPOS);
+            rowPill("Input overlay", T_OVERLAY);
+            rowPill("Click telemetry", T_CLICKHUD);
+            rowPill("Clickbot sounds", T_CLICKBOT);
+            rowValue("Clickpack", B_PACK_DN, B_PACK_UP, L_PACK);
             break;
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
             rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
-            rowText("ChxrCky Macro Bot v1.0.3");
+            rowText("ChxrCky Macro Bot v1.0.4");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
@@ -424,6 +433,14 @@ public:
         setPill(T_HUD, cky::hudOn);
         setPill(T_STARTPOS, cky::startPosOn);
         setPill(T_TELEM, cky::ckptTelemetry);
+        setPill(T_OVERLAY, cky::overlayOn);
+        setPill(T_CLICKHUD, cky::clickHudOn);
+        setPill(T_CLICKBOT, cky::clickbotOn);
+        {
+            std::string n = ckyClickPackName();
+            if (n.size() > 9) n = n.substr(0, 8) + "~";
+            setText(L_PACK, n);
+        }
 
         setText(L_TPS, fmt::format("{}", static_cast<int>(cky::tps)));
         setText(L_SPEED, fmt::format("{:.2f}x", cky::speed));
@@ -435,8 +452,9 @@ public:
         setText(L_INFO2, fmt::format("Macro TPS: {}", static_cast<int>(cky::macroTps)));
         setText(L_INFO3, fmt::format("Slot {}: {}", cky::slot,
             cky::slotExists() ? "saved" : "empty"));
-            
+        setText(L_OFF, fmt::format("{:+d}", cky::frameOffset));
         setText(L_THEME, thm().name);
+
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))
             : std::string("High TPS: OFF (tap to cycle)"));
@@ -465,7 +483,7 @@ public:
                 cky::playArmed = false;
                 cky::macroTps = cky::effTps();
                 cky::recArmed = (cky::step == 0);
-                if (!cky::recArmed) ckyNotify("Recording will start when you restart the level");
+                if (!cky::recArmed) ckyNotify("Recording starts when you restart the level");
             }
             break;
         case T_PLAY:
@@ -481,11 +499,6 @@ public:
                 cky::cursor = 0;
                 cky::playArmed = (cky::step == 0);
                 if (!cky::playArmed) ckyNotify("Playback ON: restart the level to start it");
-                
-                if (std::abs(cky::macroTps - cky::effTps()) > 0.5f) {
-                    ckyNotify(fmt::format("Macro was recorded at {} TPS, you're at {}",
-                        static_cast<int>(cky::macroTps), static_cast<int>(cky::effTps())).c_str(), false);
-                                }
             }
             break;
         case T_STEPPER:
@@ -537,6 +550,16 @@ public:
             break;
         case T_TELEM:
             cky::ckptTelemetry = !cky::ckptTelemetry;
+            break;
+        case T_OVERLAY:
+            cky::overlayOn = !cky::overlayOn;
+            break;
+        case T_CLICKHUD:
+            cky::clickHudOn = !cky::clickHudOn;
+            break;
+        case T_CLICKBOT:
+            cky::clickbotOn = !cky::clickbotOn;
+            ckyClickRescan();
             break;
         default: break;
         }
@@ -603,11 +626,18 @@ public:
             }
             break;
         case B_RESETPOS:
-            cky::savePos("icon", CCPoint(-99999.f, -99999.f));
+            cky::savePos("cky-icon", CCPoint(-99999.f, -99999.f));
             if (m_host) {
                 if (auto ic = m_host->getChildByID("cky-icon")) ic->setPosition(ckyDefaultIconPos());
             }
-            ckyNotify("Icon position reset");
+            break;
+        case B_PACK_DN:
+        case B_PACK_UP:
+            ckyClickPackStep(t == B_PACK_UP ? 1 : -1);
+            break;
+        case B_OFF_DN:
+        case B_OFF_UP:
+            cky::frameOffset = std::clamp(cky::frameOffset + (t == B_OFF_UP ? 1 : -1), -10, 10);
             break;
         case B_IMPORT:
             ckyImportGdr();
@@ -624,11 +654,7 @@ public:
             return;
         }
         case B_LICENSE:
-            utils::web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
-            break;
-        case B_PACK_DN:
-        case B_PACK_UP:
-            ckyClickPackStep(t == B_PACK_UP ? 1 : -1);
+            web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;
         default: break;
         }
@@ -638,8 +664,12 @@ public:
 };
 
 void ckyOpenPanel(CCNode* host) {
+    if (ckyUiIsImGui()) { ckyImGuiToggle(); return; }
     if (!host || host->getChildByID("cky-panel")) return;
-    if (auto p = CkyPanel::create()) p->attachTo(host);
+    auto p = CkyPanel::create();
+    if (!p) return;
+    p->attachTo(host);
 }
 
 // END OF FILE (panel.cpp)
+    
