@@ -1,4 +1,4 @@
-// icon.cpp — draggable square Cky button (main menu + pause screen)
+// icon.cpp — draggable Square Cky button (main menu + pause screen)
 #include "state.hpp"
 #include "icons.hpp"
 #include <Geode/modify/MenuLayer.hpp>
