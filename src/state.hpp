@@ -1,8 +1,8 @@
 #pragma once
 #include <Geode/Geode.hpp>
 #include <algorithm>
-#include <cmath>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -35,6 +35,8 @@ void ckyClickRescan();
 std::string ckyClickPackName();
 void ckyClickPackStep(int dir);
 bool ckyImportGdr();
+bool ckyUiIsImGui();
+void ckyImGuiToggle();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -86,10 +88,16 @@ namespace cky {
     inline bool     clickHudOn = true;
     inline bool     clickbotOn = false;
     inline int      clickPack = 0;
-    inline int      theme = 0;
     inline uint32_t clicksTotal = 0;
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
+    inline int      theme = 0;
+    inline bool     imguiOpen = false;
+
+    // input fixes
+    inline int      frameOffset = 0;
+    inline bool     holdFix[0x200] = {};
+    inline bool     holdFixPending = false;
 
     inline bool     ncShowAcc = true;
     inline bool     ncShowDeaths = true;
@@ -117,10 +125,9 @@ namespace cky {
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
     inline float effSpeed() { return speedOn ? speed : 1.f; }
-    
-    // macros count raw physics steps, so playback matches the recording this sucks bro
+
     inline double clockInc() {
-        return 1.0;
+        return static_cast<double>(macroTps) / static_cast<double>(effTps());
     }
 
     inline bool cheating() {
@@ -145,7 +152,11 @@ namespace cky {
     inline bool cpInit = false;
 
     inline void trackCheckpoints(size_t cnt) {
-        if (!recording || !recArmed) { ckpts.clear(); cpInit = false; return; }
+        if (!(recording && recArmed) && !(playing && playArmed)) {
+            ckpts.clear();
+            cpInit = false;
+            return;
+        }
         if (!cpInit) {
             ckpts.clear();
             for (size_t i = 0; i < cnt; ++i) ckpts.push_back({ 0, 0.0, 0, false });
@@ -156,6 +167,7 @@ namespace cky {
         while (ckpts.size() > cnt) ckpts.pop_back();
     }
 
+    // recording: cut the macro back to the checkpoint
     inline void rewindTo(Cp const& cp) {
         step = cp.step;
         frameClock = cp.clock;
@@ -169,6 +181,20 @@ namespace cky {
         for (int i = 0; i < 0x200; ++i) {
             if (held[i]) macro.push_back({ fr, false, i });
         }
+    }
+
+    // playback: jump the clock and cursor back to a checkpoint; buttons that should be
+    // held at that moment get re-pressed on the next step
+    inline void rewindPlaybackTo(Cp const& cp) {
+        step = cp.step;
+        frameClock = cp.clock;
+        cursor = 0;
+        for (auto& h : holdFix) h = false;
+        while (cursor < macro.size() && static_cast<double>(macro[cursor].frame) < cp.clock) {
+            holdFix[macro[cursor].playerButton & 0x1FF] = macro[cursor].isPress;
+            ++cursor;
+        }
+        holdFixPending = true;
     }
 
     // wipes the whole recording buffer
@@ -207,7 +233,8 @@ namespace cky {
     inline void savePos(std::string const& key, CCPoint p) {
         Mod::get()->setSavedValue<float>(key + "-x", p.x);
         Mod::get()->setSavedValue<float>(key + "-y", p.y);
-}
+    }
+
     // ---- file helpers ----
     template <class T>
     inline void wr(std::ofstream& f, T v) {
@@ -227,15 +254,6 @@ namespace cky {
         return 0;
     }
 
-    // <launcher>/game/macros  (falls back to the mod save folder if it can't be created)
-    inline std::filesystem::path macroDir() {
-        std::error_code ec;
-        auto dir = geode::dirs::getGameDir() / "macros";
-        std::filesystem::create_directories(dir, ec);
-        if (std::filesystem::is_directory(dir, ec)) return dir;
-        return Mod::get()->getSaveDir();
-    }
-
     inline std::string levelNameSafe() {
         std::string out;
         if (auto pl = PlayLayer::get()) {
@@ -249,6 +267,15 @@ namespace cky {
         if (out.empty()) out = "level";
         if (out.size() > 40) out.resize(40);
         return out;
+    }
+
+    // <launcher>/game/macros  (falls back to the mod save folder if it can't be created)
+    inline std::filesystem::path macroDir() {
+        std::error_code ec;
+        auto dir = geode::dirs::getGameDir() / "macros";
+        std::filesystem::create_directories(dir, ec);
+        if (std::filesystem::is_directory(dir, ec)) return dir;
+        return Mod::get()->getSaveDir();
     }
 
     // e.g. Stereo_Madness_1_slot1.cky
@@ -282,7 +309,6 @@ namespace cky {
             auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
             if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
         }
-
         // slot 1 also picks up macros saved by older versions
         if (!std::filesystem::exists(p, ec) && slot == 1) {
             auto old = Mod::get()->getSaveDir() / fmt::format("macro_{}.cky", levelId());
@@ -321,7 +347,7 @@ namespace cky {
         cursor = 0;
         return true;
     }
-} // end namespace cky
+}
 
 // ---------- shared helpers ----------
 inline void ckyNotify(char const* text, bool ok = true) {
