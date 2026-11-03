@@ -119,6 +119,7 @@ void ckyClickPackStep(int dir) {
     }
     int n = static_cast<int>(g_names.size());
     cky::clickPack = ((cky::clickPack + dir) % n + n) % n;
+    Mod::get()->setSavedValue<int>("click-pack", cky::clickPack);
     scan();
 }
 
@@ -164,7 +165,12 @@ void ckyClickSound(bool down, bool isPlayer1) {
     auto engine = FMODAudioEngine::sharedEngine();
     if (!engine) return;
     std::uniform_int_distribution<size_t> d(0, pool->size() - 1);
-    engine->playEffect((*pool)[d(g_rng)], 1.f, 1.f, 1.f);
+    engine->playEffect((*pool)[d(g_rng)], 1.f, 1.f, static_cast<float>(cky::clickVol) / 100.f);
+
+    $on_mod(Loaded) {
+    cky::clickVol = Mod::get()->getSavedValue<int>("click-vol", 100);
+    cky::clickPack = Mod::get()->getSavedValue<int>("click-pack", 0);
+}
 }
 
 // END OF FILE (clickbot.cpp)
