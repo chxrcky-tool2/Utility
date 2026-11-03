@@ -22,7 +22,7 @@ CPMAddPackage("gh:maxnut/GDReplayFormat#gdr2")
 target_link_libraries(${PROJECT_NAME} libGDR)
 
 # ImGui menu (optional): remove the "#" on the next two lines to enable it
-# CPMAddPackage("gh:matcool/gd-imgui-cocos#geode")
-# target_link_libraries(${PROJECT_NAME} imgui-cocos)
+CPMAddPackage("gh:matcool/gd-imgui-cocos#geode")
+target_link_libraries(${PROJECT_NAME} imgui-cocos)
 
 setup_geode_mod(${PROJECT_NAME})
