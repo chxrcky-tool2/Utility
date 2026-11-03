@@ -1,4 +1,4 @@
-// clickbot.cpp — ZCB-style clickpack loader + click sounds
+// clickbot.cpp — clickpack loader + click sounds
 // packs live in <game dir>/clicks/<PackName>/player1/{clicks,releases,softclicks,...}
 #include "state.hpp"
 #include <random>
@@ -165,12 +165,11 @@ void ckyClickSound(bool down, bool isPlayer1) {
     auto engine = FMODAudioEngine::sharedEngine();
     if (!engine) return;
     std::uniform_int_distribution<size_t> d(0, pool->size() - 1);
-    engine->playEffect((*pool)[d(g_rng)], 1.f, 1.f, static_cast<float>(cky::clickVol) / 100.f);
+engine->playEffect((*pool)[d(g_rng)], 1.f, 1.f, static_cast<float>(cky::clickVol) / 100.f);
+}
 
-    $on_mod(Loaded) {
+$on_mod(Loaded) {
     cky::clickVol = Mod::get()->getSavedValue<int>("click-vol", 100);
     cky::clickPack = Mod::get()->getSavedValue<int>("click-pack", 0);
 }
-}
-
-// END OF FILE (clickbot.cpp)
+// End of the file "Clickbot.cpp" omg omh
