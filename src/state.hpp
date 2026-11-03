@@ -49,6 +49,7 @@ namespace cky {
     constexpr int P2_FLAG = 0x100;
     constexpr uint32_t MAX_ENTRIES = 10000000;
     constexpr int MAX_SLOTS = 20;
+    constexpr float TPS_MIN = 1.f, TPS_MAX = 6000.f;
 
     inline std::vector<MacroInput> macro;
     inline uint32_t step = 0;
@@ -92,6 +93,8 @@ namespace cky {
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
     inline int      theme = 0;
+    inline int      clickVol = 100;   // clickbot volume, percent (0-200)
+    inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
 
     // input fixes
@@ -121,6 +124,7 @@ namespace cky {
         30.f, 60.f, 90.f, 120.f, 144.f, 240.f, 360.f, 480.f, 1000.f
     };
     inline std::vector<float> const sizeList = { 0.6f, 0.8f, 1.f, 1.2f, 1.5f };
+    inline std::vector<float> const tpsStepList = { 1.f, 5.f, 10.f, 50.f, 100.f, 500.f };
     inline std::vector<float> const highTpsList = { 480.f, 960.f, 1920.f, 3000.f, 5000.f };
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
