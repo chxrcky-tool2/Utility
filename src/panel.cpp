@@ -1,4 +1,4 @@
-// panel.cpp — GDH-style menu: themes, tab sidebar, black-outlined pills, +/- values, scrolling rows
+// panel.cpp — menu: themes, 6 tabs, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
 #include <Geode/utils/web.hpp>
 
@@ -43,14 +43,15 @@ namespace {
 #define kBtn    (thm().btn)
 
     enum : int {
-        T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO, T_FPS,
+        T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
-        B_SPD_DN, B_SPD_UP, B_FPS_DN, B_FPS_UP, B_HUDSZ_DN, B_HUDSZ_UP,
-        B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT, B_THEME_DN, B_THEME_UP,
-        B_OFF_DN, B_OFF_UP,
-        L_TPS = 70, L_SPEED, L_FPS, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3, L_PACK, L_THEME, L_OFF,
+        B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
+        B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
+        B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP,
+        L_TPS = 70, L_TSTEP, L_SPEED, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3,
+        L_PACK, L_THEME, L_OFF, L_VOL,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -298,10 +299,10 @@ public:
         m_tabMenu = CCMenu::create();
         m_tabMenu->setPosition({0.f, 0.f});
         this->addChild(m_tabMenu, 4);
-        static char const* names[5] = { "Bot", "Global", "Player", "Display", "Settings" };
-        for (int i = 0; i < 5; ++i) {
+        static char const* names[6] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings" };
+        for (int i = 0; i < 6; ++i) {
             makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i,
-                    -149.f, 56.f - 38.f * static_cast<float>(i), 104.f, 30.f, names[i], kTab, 0.4f);
+                    -149.f, 60.f - 32.f * static_cast<float>(i), 104.f, 28.f, names[i], kTab, 0.4f);
         }
 
         auto closeMenu = CCMenu::create();
@@ -337,7 +338,7 @@ public:
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_UP, 112.f, 113.f, 38.f, 18.f, "Up", kAccent, 0.35f);
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_DN, 156.f, 113.f, 38.f, 18.f, "Dn", kAccent, 0.35f);
 
-        static char const* names[5] = { "Bot", "Global", "Player", "Display", "Settings" };
+        static char const* names[6] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
@@ -364,13 +365,12 @@ public:
             break;
         case 1:
             rowPill("TPS bypass", T_TPS);
-            rowValue("TPS", B_TPS_DN, B_TPS_UP, L_TPS);
+            rowValue("TPS (1-6000)", B_TPS_DN, B_TPS_UP, L_TPS);
+            rowValue("TPS step", B_TSTEP_DN, B_TSTEP_UP, L_TSTEP);
             rowWide("High TPS", B_HIGH);
             rowPill("Speedhack", T_SPEED);
             rowValue("Speed", B_SPD_DN, B_SPD_UP, L_SPEED);
             rowPill("Audio follows speed", T_AUDIO);
-            rowPill("FPS bypass", T_FPS);
-            rowValue("FPS", B_FPS_DN, B_FPS_UP, L_FPS);
             break;
         case 2:
             rowPill("Noclip", T_NOCLIP);
@@ -385,8 +385,13 @@ public:
             rowPill("StartPos switcher", T_STARTPOS);
             rowPill("Input overlay", T_OVERLAY);
             rowPill("Click telemetry", T_CLICKHUD);
+            break;
+        case 4:
             rowPill("Clickbot sounds", T_CLICKBOT);
             rowValue("Clickpack", B_PACK_DN, B_PACK_UP, L_PACK);
+            rowValue("Volume", B_VOL_DN, B_VOL_UP, L_VOL);
+            rowText("Packs go in game/clicks/<PackName>/");
+            rowText("with player1/clicks, releases, softclicks...");
             break;
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
@@ -411,7 +416,7 @@ public:
     }
 
     void refreshTabs() {
-        for (int i = 0; i < 5; ++i) {
+        for (int i = 0; i < 6; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
             paint(it, i == m_tab ? kAccent : kTab);
         }
@@ -424,7 +429,6 @@ public:
         setPill(T_TPS, cky::tpsOn);
         setPill(T_SPEED, cky::speedOn);
         setPill(T_AUDIO, cky::audioSpeed);
-        setPill(T_FPS, cky::fpsOn);
         setPill(T_NOCLIP, cky::noclip);
         setPill(T_SAFE, cky::safeMode);
         setPill(T_NCACC, cky::ncShowAcc);
@@ -443,11 +447,12 @@ public:
         }
 
         setText(L_TPS, fmt::format("{}", static_cast<int>(cky::tps)));
+        setText(L_TSTEP, fmt::format("{}", static_cast<int>(cky::tpsStep)));
         setText(L_SPEED, fmt::format("{:.2f}x", cky::speed));
-        setText(L_FPS, fmt::format("{}", static_cast<int>(cky::fps)));
         setText(L_HUDSZ, fmt::format("{:.1f}x", cky::hudScale));
         setText(L_ICONSZ, fmt::format("{:.1f}x", cky::iconScale));
         setText(L_SLOT, fmt::format("{}", cky::slot));
+        setText(L_VOL, fmt::format("{}%", cky::clickVol));
         setText(L_INFO, fmt::format("Inputs: {}", cky::macro.size()));
         setText(L_INFO2, fmt::format("Macro TPS: {}", static_cast<int>(cky::macroTps)));
         setText(L_INFO3, fmt::format("Slot {}: {}", cky::slot,
@@ -458,8 +463,7 @@ public:
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))
             : std::string("High TPS: OFF (tap to cycle)"));
-    }
-
+}
     // ---- handlers ----
     void onTab(CCObject* s) {
         buildTab(static_cast<CCNode*>(s)->getTag() - TAB_BASE);
@@ -518,10 +522,6 @@ public:
         case T_AUDIO:
             cky::audioSpeed = !cky::audioSpeed;
             ckyApplyAudio();
-            break;
-        case T_FPS:
-            cky::fpsOn = !cky::fpsOn;
-            ckyApplyFps();
             break;
         case T_NOCLIP:
             cky::noclip = !cky::noclip;
@@ -591,9 +591,14 @@ public:
         case B_TPS_DN:
         case B_TPS_UP:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
-            cky::tps = cky::nextVal(cky::tpsList, cky::tps, t == B_TPS_UP ? 1 : -1);
+            cky::tps = std::clamp(cky::tps + (t == B_TPS_UP ? cky::tpsStep : -cky::tpsStep),
+                cky::TPS_MIN, cky::TPS_MAX);
             cky::tpsOn = true;
             cky::resetMeasure();
+            break;
+        case B_TSTEP_DN:
+        case B_TSTEP_UP:
+            cky::tpsStep = cky::nextVal(cky::tpsStepList, cky::tpsStep, t == B_TSTEP_UP ? 1 : -1);
             break;
         case B_HIGH:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
@@ -606,12 +611,6 @@ public:
             cky::speed = cky::nextVal(cky::speedList, cky::speed, t == B_SPD_UP ? 1 : -1);
             cky::speedOn = true;
             ckyApplyAudio();
-            break;
-        case B_FPS_DN:
-        case B_FPS_UP:
-            cky::fps = cky::nextVal(cky::fpsList, cky::fps, t == B_FPS_UP ? 1 : -1);
-            cky::fpsOn = true;
-            ckyApplyFps();
             break;
         case B_HUDSZ_DN:
         case B_HUDSZ_UP:
@@ -634,6 +633,11 @@ public:
         case B_PACK_DN:
         case B_PACK_UP:
             ckyClickPackStep(t == B_PACK_UP ? 1 : -1);
+            break;
+        case B_VOL_DN:
+        case B_VOL_UP:
+            cky::clickVol = std::clamp(cky::clickVol + (t == B_VOL_UP ? 10 : -10), 0, 200);
+            Mod::get()->setSavedValue<int>("click-vol", cky::clickVol);
             break;
         case B_OFF_DN:
         case B_OFF_UP:
@@ -672,4 +676,3 @@ void ckyOpenPanel(CCNode* host) {
 }
 
 // END OF FILE (panel.cpp)
-    
