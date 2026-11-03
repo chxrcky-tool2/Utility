@@ -5,7 +5,16 @@
   },
   "id": "chxrcky.cky_bot",
   "name": "ChxrCky Macro Bot",
-  "version": "v1.0.3",
+  "version": "v1.0.4",
   "developer": "ChxrCky",
-  "description": "Lightweight .cky macro recorder/player."
+  "description": "Lightweight .cky macro recorder/player.",
+  "settings": {
+    "ui-mode": {
+      "name": "Menu style",
+      "description": "Which menu the round Cky button opens. ImGui needs the ImGui library in the build.",
+      "type": "string",
+      "default": "Cocos",
+      "one-of": ["Cocos", "ImGui"]
+    }
+  }
 }
