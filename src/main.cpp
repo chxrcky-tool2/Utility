@@ -10,13 +10,13 @@ static constexpr bool SPEED_IN_MAIN = true;
 namespace {
     float g_diagTimer = 0.f;
 
-    // High-TPS bypass (above 240).
-    // GD works out its own step count from the delta using the formula
-    //     step size = min(1, timeWarp) / 240
-    // so just returning a different delta from getModifiedDelta gets re-quantised back to
-    // 240 steps per second (that is why the real TPS stayed at ~241). Instead we make the
-    // game itself think the step size is 1/TPS by shrinking m_timeWarp for the duration of
-    // one update call, then put it back.
+    // m_gameState.m_currentProgress is the game's own step counter; only used for the log.
+    template <class S>
+    int ckyProgress(S const& st) {
+        if constexpr (requires { st.m_currentProgress; }) return static_cast<int>(st.m_currentProgress);
+        else return -1;
+    }
+
     struct TpsScope {
         GJBaseGameLayer* layer = nullptr;
         float orig = 1.f, applied = 1.f;
@@ -146,8 +146,46 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
     }
 
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
-        if (auto pl = PlayLayer::get()) {
+        auto pl = PlayLayer::get();
+        static uint32_t s_calls = 0, s_half = 0;
+
+        if (pl) {
             cky::trackCheckpoints(pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0);
+
+            // Accuracy fix: GD 2.2081 can call processCommands more than once for the same
+            // physics step (half ticks). Our frame counter, playback injection and frame fixes
+            // must only run once per real step, otherwise the counter runs ahead by one for every
+            // click and the replay slowly desyncs (dies near the end).
+            ++s_calls;
+            if (isHalfTick) ++s_half;
+            if (s_calls <= 6 || (isHalfTick && s_half <= 6)) {
+                log::info("[cky] processCommands call#{} step={} progress={} half={} last={} dt={:.6f}",
+                    s_calls, cky::step, ckyProgress(m_gameState), isHalfTick, isLastTick, dt);
+            }
+            if (!isHalfTick && cky::step > 0 && (cky::step % 2400) == 0) {
+                log::info("[cky] sync check: step={} progress={} halfTicksSeen={}",
+                    cky::step, ckyProgress(m_gameState), s_half);
+            }
+        }
+
+        if (pl && !isHalfTick) {
+            uint32_t curFrame = static_cast<uint32_t>(std::max(0.0, cky::frameClock) + 0.5);
+
+            // record a frame fix (player positions) once per step, from the first input on
+            if (cky::recording && cky::recArmed && cky::frameFixes && !cky::macro.empty()
+                && !cky::injecting && m_player1 && m_player2 && !m_player1->m_isDead) {
+                int stride = std::max(1, static_cast<int>(std::lround(cky::macroTps / 240.f)));
+                if ((curFrame % static_cast<uint32_t>(stride)) == 0
+                    && (cky::fixes.empty() || cky::fixes.back().frame < curFrame)) {
+                    FrameFix x{};
+                    x.frame = curFrame;
+                    x.x1 = m_player1->getPositionX(); x.y1 = m_player1->getPositionY();
+                    x.r1 = m_player1->getRotation();
+                    x.x2 = m_player2->getPositionX(); x.y2 = m_player2->getPositionY();
+                    x.r2 = m_player2->getRotation();
+                    cky::fixes.push_back(x);
+                }
+            }
 
             // playback only runs after a level restart (armed), so timing starts at frame 0
             if (cky::playing && cky::playArmed) {
@@ -171,6 +209,26 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
                 cky::injecting = false;
 
+                // frame fixes: put both players back on the recorded path
+                if (cky::frameFixes && m_player1 && m_player2 && !m_player1->m_isDead) {
+                    FrameFix const* last = nullptr;
+                    while (cky::fixCursor < cky::fixes.size()
+                           && static_cast<double>(cky::fixes[cky::fixCursor].frame) <= now) {
+                        last = &cky::fixes[cky::fixCursor];
+                        ++cky::fixCursor;
+                    }
+                    if (last) {
+                        if (last->x1 != 0.f || last->y1 != 0.f) {
+                            m_player1->setPosition(CCPoint(last->x1, last->y1));
+                            m_player1->setRotation(last->r1);
+                        }
+                        if (m_gameState.m_isDualMode && (last->x2 != 0.f || last->y2 != 0.f)) {
+                            m_player2->setPosition(CCPoint(last->x2, last->y2));
+                            m_player2->setRotation(last->r2);
+                        }
+                    }
+                }
+
                 if (cky::cursor >= cky::macro.size()) {
                     cky::playing = false;
                     cky::playArmed = false;
@@ -191,8 +249,11 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         }
 
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-        cky::step = cky::step + 1;
-        cky::frameClock = cky::frameClock + cky::clockInc();
+
+        if (!isHalfTick) {
+            cky::step = cky::step + 1;
+            cky::frameClock = cky::frameClock + cky::clockInc();
+        }
     }
 
     void handleButton(bool down, int button, bool isPlayer1) {
@@ -223,6 +284,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::step = 0;
         cky::frameClock = 0.0;
         cky::cursor = 0;
+        cky::fixCursor = 0;
         cky::frozen = false;
         cky::pending = 0;
         cky::dirty = false;
@@ -267,11 +329,13 @@ class $modify(CkyPlayLayer, PlayLayer) {
             cky::step = 0;
             cky::frameClock = 0.0;
             cky::cursor = 0;
+            cky::fixCursor = 0;
             cky::ckpts.clear();
             cky::cpInit = false;
             cky::ncReset();
             ckyTelemetryReset();
             if (cky::recording) {
+                cky::fixes.clear();
                 if (cky::ckptTelemetry && !cky::macro.empty()) {
                     ckyNotify("No valid checkpoint: macro cleared", false);
                 }
@@ -299,6 +363,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
+        if (ckyTrajHandleDeath(player)) return; // trajectory fake player died: not a real death
         if (cky::noclip && object != m_anticheatSpike) {
             cky::ncBlocked = true;
             return;
