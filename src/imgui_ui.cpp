@@ -124,6 +124,12 @@ namespace {
             ckyApplyAudio();
         }
 
+        bool ff = cky::frameFixes;
+        if (ImGui::Checkbox("Frame fixes", &ff)) {
+            if (cky::recording) ckyNotify("Stop recording first", false);
+            else cky::frameFixes = ff;
+        }
+
         ImGui::Separator();
         ImGui::SliderInt("Macro slot", &cky::slot, 1, cky::MAX_SLOTS);
 
@@ -263,6 +269,15 @@ namespace {
         }
         ImGui::Checkbox("Input overlay", &cky::overlayOn);
         ImGui::Checkbox("Click telemetry", &cky::clickHudOn);
+
+        bool tj = cky::trajectory;
+        if (ImGui::Checkbox("Show trajectory", &tj)) {
+            cky::trajectory = tj;
+            if (!tj) ckyTrajClear();
+            else cky::dirty = true;
+        }
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+        ImGui::SliderInt("Trajectory length", &cky::trajLen, 60, 480);
     }
 
     void tabClicks() {
@@ -313,7 +328,7 @@ namespace {
         }
 
         ImGui::Separator();
-        ImGui::Text("ChxrCky Macro Bot v1.0.4");
+        ImGui::Text("ChxrCky Macro Bot v1.0.5");
         ImGui::TextDisabled("(c) 2026 ChxrCky - GNU GPL v3.0");
         ImGui::TextDisabled("Free software, NO WARRANTY.");
         if (ImGui::Button("Open GPL-3.0 license")) {
