@@ -8,15 +8,37 @@
 static constexpr bool SPEED_IN_MAIN = true;
 
 namespace {
-    // diagnostics: how often the TPS hook actually ran
-    uint32_t g_tpsHookCalls = 0;
-    uint32_t g_tpsStepsAsked = 0;
-    float    g_diagTimer = 0.f;
+    float g_diagTimer = 0.f;
 
-    // Makes the game's own hitbox option ("0166") read as ON while we are inside a game
-    // update. GD's updateDebugDraw() re-reads that option every frame and overwrites
-    // m_isDebugDrawEnabled / the debug node, which is why just setting the flag once
-    // never showed anything.
+    // High-TPS bypass (above 240).
+    // GD works out its own step count from the delta using the formula
+    //     step size = min(1, timeWarp) / 240
+    // so just returning a different delta from getModifiedDelta gets re-quantised back to
+    // 240 steps per second (that is why the real TPS stayed at ~241). Instead we make the
+    // game itself think the step size is 1/TPS by shrinking m_timeWarp for the duration of
+    // one update call, then put it back.
+    struct TpsScope {
+        GJBaseGameLayer* layer = nullptr;
+        float orig = 1.f, applied = 1.f;
+        bool on = false;
+        explicit TpsScope(GJBaseGameLayer* l) {
+            float t = cky::effTps();
+            if (t <= 240.f || !PlayLayer::get()) return;
+            layer = l;
+            orig = l->m_gameState.m_timeWarp;
+            float eff = std::min(1.f, orig);
+            if (!(eff > 0.f)) return;
+            applied = eff * 240.f / t;
+            l->m_gameState.m_timeWarp = applied;
+            on = true;
+        }
+        ~TpsScope() {
+            if (!on) return;
+            // a timewarp trigger fired during this update: keep the game's new value
+            if (layer->m_gameState.m_timeWarp == applied) layer->m_gameState.m_timeWarp = orig;
+        }
+    };
+
     struct HitboxScope {
         bool swapped = false;
         HitboxScope() {
@@ -44,16 +66,15 @@ namespace {
 }
 
 class $modify(CkyGameLayer, GJBaseGameLayer) {
-    // TPS bypass (reads the value every frame, so changes apply instantly)
+    // TPS below 240 (and frozen stepping at 240). Above 240 is handled by TpsScope in update().
     float getModifiedDelta(float dt) {
-        if ((cky::effTps() == 240.f && !cky::frozen) || !PlayLayer::get()) {
+        float t = cky::effTps();
+        if (t > 240.f || (t == 240.f && !cky::frozen) || !PlayLayer::get()) {
             return GJBaseGameLayer::getModifiedDelta(dt);
         }
-        ++g_tpsHookCalls;
-
         double warp = std::min(1.f, m_gameState.m_timeWarp);
         if (!(warp > 0.0)) warp = 1.0;
-        double modifier = warp / static_cast<double>(cky::effTps());
+        double modifier = warp / static_cast<double>(t);
 
         // never try to catch up more than 0.25s of game time in one frame
         double total = std::min(static_cast<double>(dt) + static_cast<double>(m_extraDelta), 0.25);
@@ -62,7 +83,6 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         double result = steps * modifier;
 
         m_extraDelta = static_cast<float>(total - result);
-        g_tpsStepsAsked += static_cast<uint32_t>(steps);
         return static_cast<float>(result);
     }
 
@@ -84,7 +104,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
                 if (cky::pending <= 0) return;
                 --cky::pending;
-                dt = 1.f / cky::effTps();
+                dt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
             } else {
                 float realDt = dt;
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
@@ -99,21 +119,22 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         }
         if (inLevel) {
             HitboxScope hb;
-            GJBaseGameLayer::update(dt);
+            {
+                TpsScope tps(this);
+                GJBaseGameLayer::update(dt);
+            }
             forceHitboxVisible();
 
-            // if real TPS is far below the target, log whether the hook is even running
+            // if real TPS is far below the target, say so in the Geode log
             g_diagTimer += dt;
             if (g_diagTimer >= 3.f) {
                 if (cky::effTps() > 240.f && cky::actualTps > 0.f
                     && cky::actualTps < cky::effTps() * 0.9f) {
-                    log::warn("[cky] TPS target {} real {:.0f} | hook calls {} | steps asked {}",
+                    log::warn("[cky] TPS target {} but real {:.0f} (timeWarp {:.3f})",
                         static_cast<int>(cky::effTps()), cky::actualTps,
-                        g_tpsHookCalls, g_tpsStepsAsked);
+                        m_gameState.m_timeWarp);
                 }
                 g_diagTimer = 0.f;
-                g_tpsHookCalls = 0;
-                g_tpsStepsAsked = 0;
             }
         } else {
             GJBaseGameLayer::update(dt);
