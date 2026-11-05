@@ -7,19 +7,63 @@
 // false = set this if physics.cpp already applies speed, so it isn't applied twice
 static constexpr bool SPEED_IN_MAIN = true;
 
+namespace {
+    // diagnostics: how often the TPS hook actually ran
+    uint32_t g_tpsHookCalls = 0;
+    uint32_t g_tpsStepsAsked = 0;
+    float    g_diagTimer = 0.f;
+
+    // Makes the game's own hitbox option ("0166") read as ON while we are inside a game
+    // update. GD's updateDebugDraw() re-reads that option every frame and overwrites
+    // m_isDebugDrawEnabled / the debug node, which is why just setting the flag once
+    // never showed anything.
+    struct HitboxScope {
+        bool swapped = false;
+        HitboxScope() {
+            if (!cky::hitboxes) return;
+            auto gm = GameManager::get();
+            if (!gm) return;
+            if (!gm->getGameVariable("0166")) {
+                gm->setGameVariable("0166", true);
+                swapped = true;
+            }
+        }
+        ~HitboxScope() {
+            if (!swapped) return;
+            if (auto gm = GameManager::get()) gm->setGameVariable("0166", false);
+        }
+    };
+
+    void forceHitboxVisible() {
+        if (!cky::hitboxes) return;
+        auto pl = PlayLayer::get();
+        if (!pl) return;
+        pl->m_isDebugDrawEnabled = true;
+        if (pl->m_debugDrawNode) pl->m_debugDrawNode->setVisible(true);
+    }
+}
+
 class $modify(CkyGameLayer, GJBaseGameLayer) {
     // TPS bypass (reads the value every frame, so changes apply instantly)
     float getModifiedDelta(float dt) {
         if ((cky::effTps() == 240.f && !cky::frozen) || !PlayLayer::get()) {
             return GJBaseGameLayer::getModifiedDelta(dt);
         }
-        float warp = std::min(1.f, m_gameState.m_timeWarp);
-        float modifier = warp / cky::effTps();
-        float total = dt + m_extraDelta;
-        int steps = static_cast<int>(total / modifier + 0.0001f);
-        float result = steps * modifier;
-        m_extraDelta = total - result;
-        return result;
+        ++g_tpsHookCalls;
+
+        double warp = std::min(1.f, m_gameState.m_timeWarp);
+        if (!(warp > 0.0)) warp = 1.0;
+        double modifier = warp / static_cast<double>(cky::effTps());
+
+        // never try to catch up more than 0.25s of game time in one frame
+        double total = std::min(static_cast<double>(dt) + static_cast<double>(m_extraDelta), 0.25);
+        double stepsD = std::floor(total / modifier + 1e-4);
+        int steps = static_cast<int>(std::max(0.0, stepsD));
+        double result = steps * modifier;
+
+        m_extraDelta = static_cast<float>(total - result);
+        g_tpsStepsAsked += static_cast<uint32_t>(steps);
+        return static_cast<float>(result);
     }
 
     void update(float dt) {
@@ -53,7 +97,27 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
             }
         }
-        GJBaseGameLayer::update(dt);
+        if (inLevel) {
+            HitboxScope hb;
+            GJBaseGameLayer::update(dt);
+            forceHitboxVisible();
+
+            // if real TPS is far below the target, log whether the hook is even running
+            g_diagTimer += dt;
+            if (g_diagTimer >= 3.f) {
+                if (cky::effTps() > 240.f && cky::actualTps > 0.f
+                    && cky::actualTps < cky::effTps() * 0.9f) {
+                    log::warn("[cky] TPS target {} real {:.0f} | hook calls {} | steps asked {}",
+                        static_cast<int>(cky::effTps()), cky::actualTps,
+                        g_tpsHookCalls, g_tpsStepsAsked);
+                }
+                g_diagTimer = 0.f;
+                g_tpsHookCalls = 0;
+                g_tpsStepsAsked = 0;
+            }
+        } else {
+            GJBaseGameLayer::update(dt);
+        }
         if (inLevel && (++cky::hudTick % 6) == 0) {
             ckyHudRefresh();
             if ((cky::hudTick % 30) == 0) ckyApplyAudio();
@@ -205,6 +269,12 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::dirty = false;
         ckyApplyAudio();
         ckyApplyHitboxes();
+    }
+
+    void postUpdate(float dt) {
+        HitboxScope hb;
+        PlayLayer::postUpdate(dt);
+        forceHitboxVisible();
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
