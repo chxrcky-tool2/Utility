@@ -73,6 +73,8 @@ bool ckyImportGdr() {
     }
 
     cky::macro = std::move(tmp);
+    cky::fixes.clear(); // GDR files carry no frame fixes
+    cky::fixCursor = 0;
     cky::cursor = 0;
     cky::macroTps = rep.framerate > 1.0 ? static_cast<float>(rep.framerate) : 240.f;
     cky::tps = cky::macroTps;
