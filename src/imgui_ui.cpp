@@ -199,8 +199,14 @@ namespace {
         }
         float sp = cky::speed;
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
-        if (ImGui::SliderFloat("##speed", &sp, 0.05f, 5.f, "%.2fx")) {
-            cky::speed = sp;
+        if (ImGui::SliderFloat("##speed", &sp, 0.01f, 4.f, "%.2fx")) {
+            cky::speed = std::clamp(std::round(sp * 100.f) / 100.f, 0.01f, 4.f);
+            cky::speedOn = true;
+            ckyApplyAudio();
+        }
+        float sp2 = cky::speed;
+        if (minusPlus("speed", sp2, 0.01f, 0.01f, 4.f)) {
+            cky::speed = std::round(sp2 * 100.f) / 100.f;
             cky::speedOn = true;
             ckyApplyAudio();
         }
