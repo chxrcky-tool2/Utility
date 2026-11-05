@@ -11,6 +11,13 @@
 
 using namespace geode::prelude;
 
+// per-step player snapshot used by "Frame fixes" (position + rotation of both players)
+struct FrameFix {
+    uint32_t frame;
+    float x1, y1, r1;
+    float x2, y2, r2;
+};
+
 struct MacroInput {
     uint32_t frame;
     bool     isPress;
@@ -35,6 +42,8 @@ void ckyClickRescan();
 std::string ckyClickPackName();
 void ckyClickPackStep(int dir);
 bool ckyImportGdr();
+bool ckyTrajHandleDeath(PlayerObject* player); // true = it was a trajectory fake player
+void ckyTrajClear();
 bool ckyUiIsImGui();
 void ckyImGuiToggle();
 
@@ -46,6 +55,7 @@ inline CCPoint ckyDefaultIconPos() {
 namespace cky {
     constexpr uint32_t MAGIC1 = 0x31594B43; // "CKY1"
     constexpr uint32_t MAGIC2 = 0x32594B43; // "CKY2"
+    constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes)
     constexpr int P2_FLAG = 0x100;
     constexpr uint32_t MAX_ENTRIES = 10000000;
     constexpr int MAX_SLOTS = 20;
@@ -61,6 +71,14 @@ namespace cky {
     inline bool     recArmed = false;
     inline bool     playArmed = false;
     inline int      slot = 1;
+
+    // frame fixes + trajectory
+    inline std::vector<FrameFix> fixes;
+    inline size_t   fixCursor = 0;
+    inline bool     frameFixes = true;
+    inline bool     trajectory = false;
+    inline bool     trajCreating = false;
+    inline int      trajLen = 200;        // simulated steps (60-480)
 
     inline float    tps = 240.f;
     inline bool     tpsOn = true;
@@ -135,7 +153,7 @@ namespace cky {
     }
 
     inline bool cheating() {
-        return effSpeed() != 1.f || effTps() != 240.f || noclip || playing || frozen;
+        return effSpeed() != 1.f || effTps() != 240.f || noclip || playing || frozen || trajectory;
     }
 
     inline void resetMeasure() { measSteps = 0; measTime = 0.f; actualTps = 0.f; }
@@ -176,6 +194,11 @@ namespace cky {
         step = cp.step;
         frameClock = cp.clock;
         cursor = 0;
+        {
+            uint32_t cf = static_cast<uint32_t>(cp.clock + 0.5);
+            while (!fixes.empty() && fixes.back().frame >= cf) fixes.pop_back();
+            fixCursor = 0;
+        }
         if (macro.size() > cp.macroSize) {
             macro.erase(macro.begin() + cp.macroSize, macro.end());
         }
@@ -199,11 +222,15 @@ namespace cky {
             ++cursor;
         }
         holdFixPending = true;
+        fixCursor = 0;
+        while (fixCursor < fixes.size() && static_cast<double>(fixes[fixCursor].frame) < cp.clock) ++fixCursor;
     }
 
     // wipes the whole recording buffer
     inline void clearMacro() {
         macro.clear();
+        fixes.clear();
+        fixCursor = 0;
         cursor = 0;
         ckpts.clear();
         cpInit = false;
@@ -295,13 +322,19 @@ namespace cky {
     inline bool save() {
         std::ofstream f(slotPath(), std::ios::binary | std::ios::trunc);
         if (!f) return false;
-        wr<uint32_t>(f, MAGIC2);
+        wr<uint32_t>(f, MAGIC3);
         wr<float>(f, macroTps);
         wr<uint32_t>(f, static_cast<uint32_t>(macro.size()));
         for (auto const& entry : macro) {
             wr<uint32_t>(f, entry.frame);
             wr<uint8_t>(f, entry.isPress ? 1 : 0);
             wr<int32_t>(f, entry.playerButton);
+        }
+        wr<uint32_t>(f, static_cast<uint32_t>(fixes.size()));
+        for (auto const& x : fixes) {
+            wr<uint32_t>(f, x.frame);
+            wr<float>(f, x.x1); wr<float>(f, x.y1); wr<float>(f, x.r1);
+            wr<float>(f, x.x2); wr<float>(f, x.y2); wr<float>(f, x.r2);
         }
         return f.good();
     }
@@ -326,7 +359,7 @@ namespace cky {
         uint32_t magic = 0, count = 0;
         float t = 240.f;
         if (!rd(f, magic)) return false;
-        if (magic == MAGIC2) {
+        if (magic == MAGIC2 || magic == MAGIC3) {
             if (!rd(f, t)) return false;
         } else if (magic != MAGIC1) {
             return false;
@@ -346,7 +379,24 @@ namespace cky {
             lastFrame = fr;
             tmp.push_back({ fr, press != 0, btn });
         }
+        std::vector<FrameFix> fx;
+        if (magic == MAGIC3) {
+            uint32_t fc = 0;
+            if (!rd(f, fc) || fc > MAX_ENTRIES) return false;
+            fx.reserve(fc);
+            uint32_t lastFix = 0;
+            for (uint32_t i = 0; i < fc; ++i) {
+                FrameFix x{};
+                if (!rd(f, x.frame) || !rd(f, x.x1) || !rd(f, x.y1) || !rd(f, x.r1)
+                    || !rd(f, x.x2) || !rd(f, x.y2) || !rd(f, x.r2)) return false;
+                if (x.frame < lastFix) return false;
+                lastFix = x.frame;
+                fx.push_back(x);
+            }
+        }
         macro = std::move(tmp);
+        fixes = std::move(fx);
+        fixCursor = 0;
         macroTps = t;
         cursor = 0;
         return true;
