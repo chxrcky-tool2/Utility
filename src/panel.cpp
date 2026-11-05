@@ -45,13 +45,13 @@ namespace {
     enum : int {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
-        T_OVERLAY, T_CLICKHUD, T_CLICKBOT,
+        T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
-        B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP,
+        B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP, B_TLEN_DN, B_TLEN_UP,
         L_TPS = 70, L_TSTEP, L_SPEED, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3,
-        L_PACK, L_THEME, L_OFF, L_VOL,
+        L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -354,6 +354,7 @@ public:
             rowPill("Record", T_REC);
             rowPill("Playback", T_PLAY);
             rowPill("Frame stepper", T_STEPPER);
+            rowPill("Frame fixes", T_FFIX);
             rowValue("Macro slot", B_SLOT_DN, B_SLOT_UP, L_SLOT);
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
             rowWide("Clear macro", B_CLEAR);
@@ -385,6 +386,8 @@ public:
             rowPill("StartPos switcher", T_STARTPOS);
             rowPill("Input overlay", T_OVERLAY);
             rowPill("Click telemetry", T_CLICKHUD);
+            rowPill("Show trajectory", T_TRAJ);
+            rowValue("Trajectory length", B_TLEN_DN, B_TLEN_UP, L_TLEN);
             break;
         case 4:
             rowPill("Clickbot sounds", T_CLICKBOT);
@@ -398,7 +401,7 @@ public:
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
             rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
-            rowText("ChxrCky Macro Bot v1.0.4");
+            rowText("ChxrCky Macro Bot v1.0.5");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
@@ -440,6 +443,9 @@ public:
         setPill(T_OVERLAY, cky::overlayOn);
         setPill(T_CLICKHUD, cky::clickHudOn);
         setPill(T_CLICKBOT, cky::clickbotOn);
+        setPill(T_TRAJ, cky::trajectory);
+        setPill(T_FFIX, cky::frameFixes);
+        setText(L_TLEN, fmt::format("{}", cky::trajLen));
         {
             std::string n = ckyClickPackName();
             if (n.size() > 9) n = n.substr(0, 8) + "~";
@@ -561,6 +567,15 @@ public:
             cky::clickbotOn = !cky::clickbotOn;
             ckyClickRescan();
             break;
+        case T_TRAJ:
+            cky::trajectory = !cky::trajectory;
+            if (!cky::trajectory) ckyTrajClear();
+            else cky::dirty = true; // trajectory counts as a cheat: completion is blocked in safe mode
+            break;
+        case T_FFIX:
+            if (cky::recording) { ckyNotify("Stop recording first", false); break; }
+            cky::frameFixes = !cky::frameFixes;
+            break;
         default: break;
         }
         refresh();
@@ -638,6 +653,10 @@ public:
         case B_VOL_UP:
             cky::clickVol = std::clamp(cky::clickVol + (t == B_VOL_UP ? 10 : -10), 0, 200);
             Mod::get()->setSavedValue<int>("click-vol", cky::clickVol);
+            break;
+        case B_TLEN_DN:
+        case B_TLEN_UP:
+            cky::trajLen = std::clamp(cky::trajLen + (t == B_TLEN_UP ? 20 : -20), 60, 480);
             break;
         case B_OFF_DN:
         case B_OFF_UP:
