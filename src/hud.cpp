@@ -367,7 +367,7 @@ void ckyHudRefresh(CCNode* hud) {
         std::string info = cky::frozen ? "PAUSED | " : "";
         if (!mode.empty()) info += mode + " | ";
         info += fmt::format("In {} | CP {}", cky::macro.size(), cky::ckpts.size());
-        if (cky::frozen && cky::backStepOn) info += fmt::format(" | BK {}", ckyBackStepCount());
+        if (cky::backStepOn) info += fmt::format(" | BK {}", ckyBackStepCount());
         ckySetLabel(sg, HudStepInfo, info, cky::frozen ? ccc3(255, 205, 120) : infoCol);
 
         if (auto a = sg->getChildByTag(TagPillA)) a->setVisible(!cky::frozen);

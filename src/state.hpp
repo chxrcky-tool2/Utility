@@ -120,6 +120,7 @@ namespace cky {
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
     inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
+    inline bool     backAlways = true;   // also keep the rolling buffer while playing
     inline int      backDepth = 240;     // how many steps you can go back (30-600)
 
     // input fixes

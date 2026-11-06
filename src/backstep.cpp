@@ -3,8 +3,9 @@
 // How it works: while the stepper is paused, a snapshot of the whole level state (the game's own
 // CheckpointObject: players, camera, triggers, groups...) is taken right before every step you
 // advance. Back step loads the previous snapshot and re-syncs the macro bot (step counter, clock,
-// recorded inputs / playback cursor). Snapshots only exist while paused, so there is no cost
-// while you are playing and nothing extra for high-TPS levels.
+// recorded inputs / playback cursor). The buffer is a rolling window of the last steps, kept
+// while playing too (cky::backAlways) so you can pause and go back right away. Turn that off
+// to only snapshot while paused (no cost during play).
 #include "state.hpp"
 #include <deque>
 
@@ -28,10 +29,11 @@ void ckyBackStepClear() {
     g_ring.clear();
 }
 
-// called every update while paused, before the (optional) single step runs
+// called once per physics step (processCommands) and every update while paused
 void ckyBackStepCapture() {
     auto pl = PlayLayer::get();
-    if (!pl || !cky::backStepOn) { ckyBackStepClear(); return; }
+    if (!pl || !cky::backStepOn || (!cky::frozen && !cky::backAlways)) { ckyBackStepClear(); return; }
+    if (cky::trajCreating) return;
     if (!pl->m_player1 || pl->m_player1->m_isDead) return;
 
     // already have this exact step (paused and idle)

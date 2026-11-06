@@ -114,7 +114,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 --cky::pending;
                 dt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
             } else {
-                ckyBackStepClear(); // running again: old snapshots no longer match
+                if (!cky::backAlways) ckyBackStepClear(); // rolling buffer off: drop old snapshots
                 float realDt = dt;
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
                 if (sp != 1.f) dt *= sp;
@@ -178,6 +178,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         }
 
         if (pl && !isHalfTick) {
+            ckyBackStepCapture(); // rolling snapshot of the state at the start of this step
             uint32_t curFrame = static_cast<uint32_t>(std::max(0.0, cky::frameClock) + 0.5);
 
             // record a frame fix (player positions) once per step, from the first input on
