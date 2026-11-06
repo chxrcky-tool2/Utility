@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -18,6 +19,13 @@ struct FrameFix {
     float x2, y2, r2;
     double yv1 = 0.0, yv2 = 0.0; // vertical velocity of each player (CKY4)
     bool   hasVel = true;        // false for fixes loaded from old CKY3 files
+};
+
+// one input that reached the game, tagged with the physics step it happened on (back step re-sim)
+struct LoggedInput {
+    uint32_t step;
+    bool     press;
+    int      btn; // low byte = button id, bit 8 (0x100) = player 2
 };
 
 struct MacroInput {
@@ -53,6 +61,9 @@ void ckyBackStepCapture();
 void ckyBackStepClear();
 bool ckyBackStep();
 size_t ckyBackStepCount();
+void ckyBackStepFinish();
+void ckyInputLog(bool down, int playerButton);
+void ckyInputLogReset();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -134,6 +145,22 @@ namespace cky {
     // copy of the level state) on EVERY physics step, which is what capped real TPS.
     inline bool     backAlways = false;
     inline int      backDepth = 240;     // how many steps you can go back (30-600)
+
+    // back step re-simulation state
+    inline bool     resimming = false;
+    inline int      resimLeft = 0;
+    inline std::vector<int> resimHeld;
+    inline std::deque<LoggedInput> inputLog;
+    inline bool     held[0x200] = {};    // buttons currently held (as seen by the game)
+
+    // exact-frame desync verification
+    inline bool     verifyOn = true;
+    inline double   verifyTolPos = 0.001;
+    inline double   verifyTolVel = 0.001;
+    inline uint32_t verifyChecks = 0;
+    inline uint32_t verifyMisses = 0;
+    inline int64_t  firstDivFrame = -1;
+    inline void verifyReset() { verifyChecks = 0; verifyMisses = 0; firstDivFrame = -1; }
 
     // input fixes
     inline int      frameOffset = 0;
