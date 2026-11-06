@@ -40,7 +40,11 @@ void ckyBackStepCapture() {
     if (!g_ring.empty() && g_ring.back().info.step == cky::step) return;
 
     // the step counter went backwards or jumped (restart, checkpoint): snapshots are stale
-    if (!g_ring.empty() && g_ring.back().info.step > cky::step) ckyBackStepClear();
+    if (!g_ring.empty() && g_ring.back().info.step > cky::step) {
+        log::info("[cky] backstep: stale snapshots cleared (top {} > step {})",
+            g_ring.back().info.step, cky::step);
+        ckyBackStepClear();
+    }
 
     size_t cpCount = pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0;
     CheckpointObject* cp = pl->createCheckpoint();
@@ -67,6 +71,9 @@ bool ckyBackStep() {
     auto pl = PlayLayer::get();
     if (!pl || !cky::frozen || g_ring.empty()) return false;
 
+    uint32_t from = cky::step;
+    size_t before = g_ring.size();
+
     // top = snapshot of the current step (taken when paused): discard it
     while (g_ring.size() > 1 && g_ring.back().info.step >= cky::step) {
         dropSnap(g_ring.back());
@@ -76,6 +83,10 @@ bool ckyBackStep() {
 
     Snap& s = g_ring.back(); // stays in the ring: it is now the current step
     pl->loadFromCheckpoint(s.cp);
+    pl->m_extraDelta = 0.f; // no leftover time from the step we came from
+
+    log::info("[cky] backstep: from step {} -> {} (ring {} -> {}, popped {})",
+        from, s.info.step, before, g_ring.size(), before - g_ring.size());
 
     // re-sync the macro bot with the restored moment
     if (cky::recording && cky::recArmed) {
