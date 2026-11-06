@@ -3,8 +3,8 @@
   "gd": {
     "android": "2.2081"
   },
-  "id": "chxrcky.cky_bot",
-  "name": "ChxrCky Macro Bot",
+  "id": "chxrcky.cky_menu",
+  "name": "ChxrCky",
   "version": "v1.0.4",
   "developer": "ChxrCky",
   "description": "Lightweight .cky macro recorder/player.",
