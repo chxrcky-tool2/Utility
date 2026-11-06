@@ -46,10 +46,12 @@ namespace {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
+        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
         B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP, B_TLEN_DN, B_TLEN_UP,
+        B_HUDGEAR, B_HUDBACK,
         L_TPS = 70, L_TSTEP, L_SPEED, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3,
         L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN,
         S_UP = 95, S_DN = 96,
@@ -137,6 +139,35 @@ public:
         item->setPosition({x, y});
         menu->addChild(item);
         return item;
+    }
+
+    // small bordered button with a drawn gear on it
+    CCMenuItemSpriteExtra* makeGear(CCMenu* menu, int tag, float x, float y) {
+        auto it = makeBtn(menu, menu_selector(CkyPanel::onBtn), tag, x, y, 24.f, 20.f, "", kBtn);
+        if (auto n = it->getNormalImage()) {
+            auto g = CCDrawNode::create();
+            float cx = 12.f, cy = 10.f;
+            ccColor4F glyph = ccc4f(0.88f, 1.f, 1.f, 1.f);
+            ccColor3B b = kBtn;
+            ccColor4F hole = ccc4f(b.r / 255.f, b.g / 255.f, b.b / 255.f, 1.f);
+            for (int i = 0; i < 8; ++i) {
+                float a = static_cast<float>(i) * 3.14159265f / 4.f;
+                float dx = std::cos(a), dy = std::sin(a);
+                float px = -dy, py = dx; // perpendicular
+                float r0 = 4.f, r1 = 8.2f, w = 1.5f;
+                CCPoint q[4] = {
+                    { cx + dx * r0 + px * w, cy + dy * r0 + py * w },
+                    { cx + dx * r1 + px * w, cy + dy * r1 + py * w },
+                    { cx + dx * r1 - px * w, cy + dy * r1 - py * w },
+                    { cx + dx * r0 - px * w, cy + dy * r0 - py * w }
+                };
+                g->drawPolygon(q, 4, glyph, 0.f, glyph);
+            }
+            g->drawDot({ cx, cy }, 5.6f, glyph);
+            g->drawDot({ cx, cy }, 2.3f, hole);
+            n->addChild(g, 3);
+        }
+        return it;
     }
 
     static void paint(CCMenuItemSpriteExtra* it, ccColor3B c) {
@@ -338,7 +369,8 @@ public:
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_UP, 112.f, 113.f, 38.f, 18.f, "Up", kAccent, 0.35f);
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_DN, 156.f, 113.f, 38.f, 18.f, "Dn", kAccent, 0.35f);
 
-        static char const* names[6] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings" };
+        static char const* names[7] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
+                                        "HUD settings" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
@@ -381,7 +413,11 @@ public:
             break;
         case 3:
             rowPill("Hitboxes", T_HITBOX);
-            rowPill("HUD", T_HUD);
+            {
+                float hy = m_y;
+                rowPill("HUD", T_HUD);
+                makeGear(m_menu, B_HUDGEAR, 122.f, hy);
+            }
             rowValue("HUD size", B_HUDSZ_DN, B_HUDSZ_UP, L_HUDSZ);
             rowPill("StartPos switcher", T_STARTPOS);
             rowPill("Input overlay", T_OVERLAY);
@@ -395,6 +431,15 @@ public:
             rowValue("Volume", B_VOL_DN, B_VOL_UP, L_VOL);
             rowText("Packs go in game/clicks/<PackName>/");
             rowText("with player1/clicks, releases, softclicks...");
+            break;
+        case 6:
+            rowPill("Show frame stepper", T_HUDSTEP);
+            rowPill("Show speedhack", T_HUDSPEED);
+            rowPill("Frame stepper", T_STEPPER);
+            rowPill("Speedhack", T_SPEED);
+            rowPill("Back step", T_BACKSTEP);
+            rowPill("Buffer while playing", T_BACKALWAYS);
+            rowWide("Back to Display", B_HUDBACK);
             break;
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
@@ -421,7 +466,7 @@ public:
     void refreshTabs() {
         for (int i = 0; i < 6; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
-            paint(it, i == m_tab ? kAccent : kTab);
+            paint(it, i == (m_tab == 6 ? 3 : m_tab) ? kAccent : kTab);
         }
     }
 
@@ -445,6 +490,10 @@ public:
         setPill(T_CLICKBOT, cky::clickbotOn);
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
+        setPill(T_HUDSTEP, cky::hudStepShow);
+        setPill(T_HUDSPEED, cky::hudSpeedShow);
+        setPill(T_BACKSTEP, cky::backStepOn);
+        setPill(T_BACKALWAYS, cky::backAlways);
         setText(L_TLEN, fmt::format("{}", cky::trajLen));
         {
             std::string n = ckyClickPackName();
@@ -576,6 +625,20 @@ public:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::frameFixes = !cky::frameFixes;
             break;
+        case T_HUDSTEP:
+            cky::hudStepShow = !cky::hudStepShow;
+            break;
+        case T_HUDSPEED:
+            cky::hudSpeedShow = !cky::hudSpeedShow;
+            break;
+        case T_BACKSTEP:
+            cky::backStepOn = !cky::backStepOn;
+            if (!cky::backStepOn) ckyBackStepClear();
+            break;
+        case T_BACKALWAYS:
+            cky::backAlways = !cky::backAlways;
+            if (!cky::backAlways && !cky::frozen) ckyBackStepClear();
+            break;
         default: break;
         }
         refresh();
@@ -676,6 +739,12 @@ public:
             ckyOpenPanel(host);
             return;
         }
+        case B_HUDGEAR:
+            buildTab(6);
+            return;
+        case B_HUDBACK:
+            buildTab(3);
+            return;
         case B_LICENSE:
             web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
             break;

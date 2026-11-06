@@ -119,6 +119,8 @@ namespace cky {
     inline int      clickVol = 100;   // clickbot volume, percent (0-200)
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
+    inline bool     hudStepShow = true;  // show the frame stepper box (top-left)
+    inline bool     hudSpeedShow = true; // show the speedhack box (top-right)
     inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
     inline bool     backAlways = true;   // also keep the rolling buffer while playing
     inline int      backDepth = 240;     // how many steps you can go back (30-600)

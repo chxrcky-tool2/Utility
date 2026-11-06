@@ -359,6 +359,7 @@ void ckyHudRefresh(CCNode* hud) {
 
     // ---- stepper ----
     if (auto sg = hud->getChildByID("cky-hud-step-group")) {
+        sg->setVisible(cky::hudStepShow);
         std::string mode = cky::recording ? (cky::recArmed ? "REC" : "REC-wait")
                          : cky::playing   ? (cky::playArmed ? "PLAY" : "PLAY-wait") : "";
         ckySetLabel(sg, HudStepLabel, fmt::format("Frame {}", cky::step),
@@ -385,6 +386,7 @@ void ckyHudRefresh(CCNode* hud) {
 
     // ---- speedhack ----
     if (auto pg = hud->getChildByID("cky-hud-speed-group")) {
+        pg->setVisible(cky::hudSpeedShow);
         bool on = cky::speedOn;
         ckySetLabel(pg, HudSpeedLabel, fmt::format("{:.2f}x", cky::effSpeed()),
             on ? white : dim);
