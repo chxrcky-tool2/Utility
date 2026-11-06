@@ -46,6 +46,47 @@ namespace {
         }
     };
 
+    // vertical velocity access that still compiles if a field is missing in this SDK
+    template <class P>
+    double ckyGetYVel(P* p) {
+        if constexpr (requires { p->m_yVelocity; }) return static_cast<double>(p->m_yVelocity);
+        else return 0.0;
+    }
+    template <class P>
+    void ckySetYVel(P* p, double v) {
+        if constexpr (requires { p->m_yVelocity = v; }) p->m_yVelocity = v;
+    }
+
+    // Frame fix: snapshot of both players (position, rotation, vertical velocity) taken at the
+    // start of a physics step, before that step's inputs are handled.
+    void ckyCaptureFix(GJBaseGameLayer* l, uint32_t frame) {
+        if (!l->m_player1 || !l->m_player2 || l->m_player1->m_isDead) return;
+        if (!cky::fixes.empty() && cky::fixes.back().frame >= frame) return; // one per frame
+        FrameFix x{};
+        x.frame = frame;
+        x.x1 = l->m_player1->getPositionX(); x.y1 = l->m_player1->getPositionY();
+        x.r1 = l->m_player1->getRotation();
+        x.x2 = l->m_player2->getPositionX(); x.y2 = l->m_player2->getPositionY();
+        x.r2 = l->m_player2->getRotation();
+        x.yv1 = ckyGetYVel(l->m_player1);
+        x.yv2 = ckyGetYVel(l->m_player2);
+        cky::fixes.push_back(x);
+    }
+
+    // put both players back on the recorded path
+    void ckyApplyFix(GJBaseGameLayer* l, FrameFix const& f) {
+        if (f.x1 != 0.f || f.y1 != 0.f) {
+            l->m_player1->setPosition(CCPoint(f.x1, f.y1));
+            l->m_player1->setRotation(f.r1);
+            if (cky::fixVelocity && f.hasVel) ckySetYVel(l->m_player1, f.yv1);
+        }
+        if (l->m_gameState.m_isDualMode && (f.x2 != 0.f || f.y2 != 0.f)) {
+            l->m_player2->setPosition(CCPoint(f.x2, f.y2));
+            l->m_player2->setRotation(f.r2);
+            if (cky::fixVelocity && f.hasVel) ckySetYVel(l->m_player2, f.yv2);
+        }
+    }
+
     struct HitboxScope {
         bool swapped = false;
         HitboxScope() {
@@ -69,6 +110,22 @@ namespace {
         if (!pl) return;
         pl->m_isDebugDrawEnabled = true;
         if (pl->m_debugDrawNode) pl->m_debugDrawNode->setVisible(true);
+
+        // Fallback: ask the game to draw this frame itself in case it skipped the draw call
+        // (compiles away if this SDK has no updateDebugDraw)
+        if constexpr (requires { pl->updateDebugDraw(); }) pl->updateDebugDraw();
+
+        // Diagnostic: one line in the Geode log every ~5 s while hitboxes are on
+        static uint32_t s_diag = 0;
+        if ((s_diag++ % 300) == 0) {
+            auto node = pl->m_debugDrawNode;
+            log::info("[cky] hitbox diag: enabled={} node={} parent={} visible={} practice={} gameVar0166={}",
+                pl->m_isDebugDrawEnabled, node != nullptr,
+                node ? (node->getParent() != nullptr) : false,
+                node ? node->isVisible() : false,
+                pl->m_isPracticeMode,
+                GameManager::get() ? GameManager::get()->getGameVariable("0166") : false);
+        }
     }
 }
 
@@ -197,23 +254,28 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
 
             // record a frame fix (player positions) once per step, from the first input on
             if (cky::recording && cky::recArmed && cky::frameFixes && !cky::macro.empty()
-                && !cky::injecting && m_player1 && m_player2 && !m_player1->m_isDead) {
-                int stride = std::max(1, static_cast<int>(std::lround(cky::macroTps / 240.f)));
-                if ((curFrame % static_cast<uint32_t>(stride)) == 0
-                    && (cky::fixes.empty() || cky::fixes.back().frame < curFrame)) {
-                    FrameFix x{};
-                    x.frame = curFrame;
-                    x.x1 = m_player1->getPositionX(); x.y1 = m_player1->getPositionY();
-                    x.r1 = m_player1->getRotation();
-                    x.x2 = m_player2->getPositionX(); x.y2 = m_player2->getPositionY();
-                    x.r2 = m_player2->getRotation();
-                    cky::fixes.push_back(x);
-                }
+                && !cky::injecting && m_player1 && m_player2) {
+                // interval is counted in 240-TPS steps, scaled to the macro's own TPS
+                int stride = std::max(1, static_cast<int>(
+                    std::lround(cky::macroTps / 240.f * std::max(1, cky::fixInterval))));
+                if ((curFrame % static_cast<uint32_t>(stride)) == 0) ckyCaptureFix(this, curFrame);
             }
 
             // playback only runs after a level restart (armed), so timing starts at frame 0
             if (cky::playing && cky::playArmed) {
                 double now = cky::frameClock - static_cast<double>(cky::frameOffset);
+
+                // frame fixes first: they were recorded before this step's inputs were handled
+                if (cky::frameFixes && m_player1 && m_player2 && !m_player1->m_isDead) {
+                    FrameFix const* last = nullptr;
+                    while (cky::fixCursor < cky::fixes.size()
+                           && static_cast<double>(cky::fixes[cky::fixCursor].frame) <= now) {
+                        last = &cky::fixes[cky::fixCursor];
+                        ++cky::fixCursor;
+                    }
+                    if (last) ckyApplyFix(this, *last);
+                }
+
                 cky::injecting = true;
                 if (cky::holdFixPending) {
                     for (int i = 0; i < 0x200; ++i) {
@@ -232,26 +294,6 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                     GJBaseGameLayer::handleButton(in.isPress, btn, p1);
                 }
                 cky::injecting = false;
-
-                // frame fixes: put both players back on the recorded path
-                if (cky::frameFixes && m_player1 && m_player2 && !m_player1->m_isDead) {
-                    FrameFix const* last = nullptr;
-                    while (cky::fixCursor < cky::fixes.size()
-                           && static_cast<double>(cky::fixes[cky::fixCursor].frame) <= now) {
-                        last = &cky::fixes[cky::fixCursor];
-                        ++cky::fixCursor;
-                    }
-                    if (last) {
-                        if (last->x1 != 0.f || last->y1 != 0.f) {
-                            m_player1->setPosition(CCPoint(last->x1, last->y1));
-                            m_player1->setRotation(last->r1);
-                        }
-                        if (m_gameState.m_isDualMode && (last->x2 != 0.f || last->y2 != 0.f)) {
-                            m_player2->setPosition(CCPoint(last->x2, last->y2));
-                            m_player2->setRotation(last->r2);
-                        }
-                    }
-                }
 
                 if (cky::cursor >= cky::macro.size()) {
                     cky::playing = false;
@@ -294,6 +336,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 entry.isPress = down;
                 entry.playerButton = button | (isPlayer1 ? 0 : cky::P2_FLAG);
                 cky::macro.push_back(entry);
+                // extra fix on every input frame (the moments that matter most for accuracy)
+                if (cky::frameFixes) ckyCaptureFix(this, entry.frame);
                 ckyOverlayShow(fmt::format("Input {} ({})",
                     cky::macro.size(), down ? "press" : "release"));
             }

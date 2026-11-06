@@ -51,9 +51,9 @@ namespace {
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
         B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP, B_TLEN_DN, B_TLEN_UP,
-        B_HUDGEAR, B_HUDBACK,
+        B_HUDGEAR, B_HUDBACK, B_FI_DN, B_FI_UP, B_FVEL,
         L_TPS = 70, L_TSTEP, L_SPEED, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3,
-        L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN,
+        L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN, L_FI,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -387,6 +387,8 @@ public:
             rowPill("Playback", T_PLAY);
             rowPill("Frame stepper", T_STEPPER);
             rowPill("Frame fixes", T_FFIX);
+            rowValue("Fix interval", B_FI_DN, B_FI_UP, L_FI);
+            rowWide("Toggle fix velocity", B_FVEL);
             rowValue("Macro slot", B_SLOT_DN, B_SLOT_UP, L_SLOT);
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
             rowWide("Clear macro", B_CLEAR);
@@ -515,6 +517,7 @@ public:
         setText(L_INFO3, fmt::format("Slot {}: {}", cky::slot,
             cky::slotExists() ? "saved" : "empty"));
         setText(L_OFF, fmt::format("{:+d}", cky::frameOffset));
+        setText(L_FI, fmt::format("{}", cky::fixInterval));
         setText(L_THEME, thm().name);
 
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
@@ -734,6 +737,16 @@ public:
         case B_TLEN_DN:
         case B_TLEN_UP:
             cky::trajLen = std::clamp(cky::trajLen + (t == B_TLEN_UP ? 20 : -20), 60, 480);
+            break;
+        case B_FI_DN:
+        case B_FI_UP:
+            if (cky::recording) { ckyNotify("Stop recording first", false); break; }
+            cky::fixInterval = static_cast<int>(cky::nextVal(
+                cky::fixIntervalList, static_cast<float>(cky::fixInterval), t == B_FI_UP ? 1 : -1));
+            break;
+        case B_FVEL:
+            cky::fixVelocity = !cky::fixVelocity;
+            ckyNotify(cky::fixVelocity ? "Fix velocity: on" : "Fix velocity: off");
             break;
         case B_OFF_DN:
         case B_OFF_UP:

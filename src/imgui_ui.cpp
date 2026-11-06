@@ -129,6 +129,14 @@ namespace {
             if (cky::recording) ckyNotify("Stop recording first", false);
             else cky::frameFixes = ff;
         }
+        {
+            int fi = cky::fixInterval;
+            if (ImGui::SliderInt("Fix interval (steps)", &fi, 1, 240)) {
+                if (cky::recording) ckyNotify("Stop recording first", false);
+                else cky::fixInterval = std::clamp(fi, 1, 240);
+            }
+            ImGui::Checkbox("Fix velocity", &cky::fixVelocity);
+        }
 
         ImGui::Separator();
         ImGui::SliderInt("Macro slot", &cky::slot, 1, cky::MAX_SLOTS);
