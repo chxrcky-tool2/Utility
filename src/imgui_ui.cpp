@@ -265,15 +265,18 @@ namespace {
         if (ImGui::TreeNode("HUD settings")) {
             ImGui::Checkbox("Show frame stepper", &cky::hudStepShow);
             ImGui::Checkbox("Show speedhack", &cky::hudSpeedShow);
-            bool fz = cky::frozen;
-            if (ImGui::Checkbox("Frame stepper", &fz)) {
-                cky::frozen = fz;
-                cky::pending = 0;
-                ckyApplyAudio();
+            bool sb = cky::stepperBtns;
+            if (ImGui::Checkbox("Frame stepper buttons", &sb)) {
+                cky::stepperBtns = sb;
+                if (!sb) {
+                    cky::frozen = false;
+                    cky::pending = 0;
+                    ckyApplyAudio();
+                }
             }
-            bool sh = cky::speedOn;
-            if (ImGui::Checkbox("Speedhack", &sh)) {
-                cky::speedOn = sh;
+            bool sh = cky::speedBtns;
+            if (ImGui::Checkbox("Speedhack buttons", &sh)) {
+                cky::speedBtns = sh;
                 ckyApplyAudio();
             }
             bool bs = cky::backStepOn;

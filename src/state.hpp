@@ -119,6 +119,8 @@ namespace cky {
     inline int      clickVol = 100;   // clickbot volume, percent (0-200)
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
+    inline bool     stepperBtns = true;  // frame stepper buttons exist in the level HUD
+    inline bool     speedBtns = true;    // speedhack buttons exist in the level HUD (off = 1.00x)
     inline bool     hudStepShow = true;  // show the frame stepper box (top-left)
     inline bool     hudSpeedShow = true; // show the speedhack box (top-right)
     inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
@@ -156,7 +158,7 @@ namespace cky {
     inline std::vector<float> const highTpsList = { 480.f, 960.f, 1920.f, 3000.f, 5000.f };
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
-    inline float effSpeed() { return speedOn ? speed : 1.f; }
+    inline float effSpeed() { return (speedOn && speedBtns) ? speed : 1.f; }
 
     inline double clockInc() {
         return static_cast<double>(macroTps) / static_cast<double>(effTps());

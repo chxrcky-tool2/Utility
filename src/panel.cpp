@@ -46,7 +46,7 @@ namespace {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
-        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS,
+        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
@@ -435,8 +435,8 @@ public:
         case 6:
             rowPill("Show frame stepper", T_HUDSTEP);
             rowPill("Show speedhack", T_HUDSPEED);
-            rowPill("Frame stepper", T_STEPPER);
-            rowPill("Speedhack", T_SPEED);
+            rowPill("Frame stepper buttons", T_STEPBTNS);
+            rowPill("Speedhack buttons", T_SPEEDBTNS);
             rowPill("Back step", T_BACKSTEP);
             rowPill("Buffer while playing", T_BACKALWAYS);
             rowWide("Back to Display", B_HUDBACK);
@@ -493,6 +493,8 @@ public:
         setPill(T_HUDSTEP, cky::hudStepShow);
         setPill(T_HUDSPEED, cky::hudSpeedShow);
         setPill(T_BACKSTEP, cky::backStepOn);
+        setPill(T_STEPBTNS, cky::stepperBtns);
+        setPill(T_SPEEDBTNS, cky::speedBtns);
         setPill(T_BACKALWAYS, cky::backAlways);
         setText(L_TLEN, fmt::format("{}", cky::trajLen));
         {
@@ -630,6 +632,18 @@ public:
             break;
         case T_HUDSPEED:
             cky::hudSpeedShow = !cky::hudSpeedShow;
+            break;
+        case T_STEPBTNS:
+            cky::stepperBtns = !cky::stepperBtns;
+            if (!cky::stepperBtns) {      // no buttons left to unpause with: resume
+                cky::frozen = false;
+                cky::pending = 0;
+                ckyApplyAudio();
+            }
+            break;
+        case T_SPEEDBTNS:
+            cky::speedBtns = !cky::speedBtns;
+            ckyApplyAudio();
             break;
         case T_BACKSTEP:
             cky::backStepOn = !cky::backStepOn;

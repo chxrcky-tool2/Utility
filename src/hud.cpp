@@ -360,6 +360,15 @@ void ckyHudRefresh(CCNode* hud) {
     // ---- stepper ----
     if (auto sg = hud->getChildByID("cky-hud-step-group")) {
         sg->setVisible(cky::hudStepShow);
+        {   // buttons are removed (not just disabled) when switched off
+            bool sb = cky::stepperBtns, bk = cky::backStepOn;
+            if (auto sm = sg->getChildByID("cky-hud-step-menu")) {
+                sm->setVisible(sb);
+                if (auto b = sm->getChildByTag(HudBack)) b->setVisible(bk);
+                if (auto s = sm->getChildByTag(HudStep)) s->setPositionX(bk ? 84.f : 52.f);
+            }
+            if (auto l = sg->getChildByTag(HudStepLabel)) l->setPositionX(!sb ? 14.f : bk ? 106.f : 74.f);
+        }
         std::string mode = cky::recording ? (cky::recArmed ? "REC" : "REC-wait")
                          : cky::playing   ? (cky::playArmed ? "PLAY" : "PLAY-wait") : "";
         ckySetLabel(sg, HudStepLabel, fmt::format("Frame {}", cky::step),
@@ -387,6 +396,8 @@ void ckyHudRefresh(CCNode* hud) {
     // ---- speedhack ----
     if (auto pg = hud->getChildByID("cky-hud-speed-group")) {
         pg->setVisible(cky::hudSpeedShow);
+        if (auto pm = pg->getChildByID("cky-hud-speed-menu")) pm->setVisible(cky::speedBtns);
+        if (auto l = pg->getChildByTag(HudSpeedLabel)) l->setPositionX(cky::speedBtns ? -63.f : -SpeedW / 2.f);
         bool on = cky::speedOn;
         ckySetLabel(pg, HudSpeedLabel, fmt::format("{:.2f}x", cky::effSpeed()),
             on ? white : dim);
@@ -397,7 +408,7 @@ void ckyHudRefresh(CCNode* hud) {
         // real TPS colour: green when it matches the target, orange when it falls short
         ccColor3B realCol = infoCol;
         if (cky::actualTps > 0.f) {
-            float ratio = cky::actualTps / std::max(1.f, cky::effTps());
+            float ratio = cky::actualTps / std::max(1.f, cky::effTps() * cky::effSpeed());
             realCol = ratio >= 0.97f ? ccc3(120, 255, 150) : ccc3(255, 190, 90);
         }
         ckySetLabel(pg, HudSpeedInfo,
