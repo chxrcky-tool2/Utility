@@ -10,16 +10,22 @@
 namespace {
     bool g_ready = false;
 
-    char const* kThemeNames[5] = { "Neon", "Ocean", "Forest", "Sunset", "Mono" };
-    ImVec4 const kThemeHi[5] = {
-        ImVec4(0.93f, 0.30f, 0.50f, 1.f), ImVec4(0.24f, 0.62f, 1.00f, 1.f),
-        ImVec4(0.30f, 0.76f, 0.40f, 1.f), ImVec4(1.00f, 0.62f, 0.22f, 1.f),
-        ImVec4(0.72f, 0.72f, 0.76f, 1.f)
+    char const* kThemeNames[cky::ThemeCount] = {
+        "Neon", "Ocean", "Forest", "Sunset", "Mono", "Cat", "Vintage", "Sky", "Lavender", "Rose"
     };
-    ImVec4 const kThemeLo[5] = {
-        ImVec4(0.62f, 0.14f, 0.30f, 1.f), ImVec4(0.10f, 0.28f, 0.62f, 1.f),
+    ImVec4 const kThemeHi[cky::ThemeCount] = {
+        ImVec4(0.93f, 0.30f, 0.50f, 1.f), ImVec4(0.28f, 0.88f, 0.82f, 1.f),
+        ImVec4(0.30f, 0.76f, 0.40f, 1.f), ImVec4(1.00f, 0.62f, 0.22f, 1.f),
+        ImVec4(0.72f, 0.72f, 0.76f, 1.f), ImVec4(1.00f, 0.77f, 0.20f, 1.f),
+        ImVec4(0.85f, 0.70f, 0.40f, 1.f), ImVec4(0.45f, 0.78f, 1.00f, 1.f),
+        ImVec4(0.75f, 0.62f, 1.00f, 1.f), ImVec4(1.00f, 0.68f, 0.80f, 1.f)
+    };
+    ImVec4 const kThemeLo[cky::ThemeCount] = {
+        ImVec4(0.62f, 0.14f, 0.30f, 1.f), ImVec4(0.03f, 0.34f, 0.56f, 1.f),
         ImVec4(0.10f, 0.42f, 0.26f, 1.f), ImVec4(0.72f, 0.20f, 0.34f, 1.f),
-        ImVec4(0.30f, 0.30f, 0.33f, 1.f)
+        ImVec4(0.30f, 0.30f, 0.33f, 1.f), ImVec4(0.36f, 0.28f, 0.42f, 1.f),
+        ImVec4(0.48f, 0.32f, 0.20f, 1.f), ImVec4(0.20f, 0.45f, 0.78f, 1.f),
+        ImVec4(0.42f, 0.30f, 0.72f, 1.f), ImVec4(0.82f, 0.38f, 0.58f, 1.f)
     };
 
     bool wantsImGui() {
@@ -27,7 +33,7 @@ namespace {
     }
 
     void applyColors(int theme) {
-        int t = std::clamp(theme, 0, 4);
+        int t = std::clamp(theme, 0, cky::ThemeCount - 1);
         ImVec4 pink = kThemeHi[t];
         ImVec4 pinkLo = kThemeLo[t];
         ImVec4 pinkHi(std::min(pink.x + 0.12f, 1.f), std::min(pink.y + 0.12f, 1.f),
@@ -353,9 +359,9 @@ namespace {
         }
         ImGui::Checkbox("Checkpoint telemetry", &cky::ckptTelemetry);
 
-        int th = std::clamp(cky::theme, 0, 4);
+        int th = std::clamp(cky::theme, 0, cky::ThemeCount - 1);
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
-        if (ImGui::SliderInt("Theme", &th, 0, 4, kThemeNames[th])) {
+        if (ImGui::SliderInt("Theme", &th, 0, cky::ThemeCount - 1, kThemeNames[th])) {
             cky::theme = th;
             Mod::get()->setSavedValue<int>("theme", cky::theme);
             applyColors(th);

@@ -121,6 +121,7 @@ namespace cky {
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
     inline int      theme = 0;
+    constexpr int   ThemeCount = 10;   // Neon, Ocean, Forest, Sunset, Mono, Cat, Vintage, Sky, Lavender, Rose
     inline int      clickVol = 100;   // clickbot volume, percent (0-200)
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
