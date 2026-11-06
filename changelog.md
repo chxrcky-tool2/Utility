@@ -4,7 +4,7 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 ## [1.0.5]
 ### Added
 - **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
-- **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset.
+- **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset, plus Cat, Vintage, Sky, Lavender and Rose. Ocean got a richer aqua-to-deep-blue palette.
 - **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.
 - **License Info:** Added GPL-3.0 license information directly to the settings menu.
 - **Show trajectory:** My actual best update. Draws the future path. Has a slider for the trajectory to become longer.
