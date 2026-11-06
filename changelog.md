@@ -1,33 +1,45 @@
 # Changelog
+All notable changes to the ChxrCky Macro Bot project will be documented in this file.
 
-All notable changes to the ChxrCky Utility project will be documented in this file.
-
-## [1.0.2] - Initial Release
-------------------------------------
+## [1.0.5]
 ### Added
-*   **Real-Time Temporal Step Decoupling:** The tick rate override system dynamically synchronizes with the engine in real-time. Modifying the target tick rate instantly applies the new physics calculation rate without requiring a level restart.
-*   **Checkpoint State Toggle Integration:** Added a new configuration toggle for the Checkpoint State Allocator directly within the Display configuration tab for quicker access.
-*   **Open-Source Compliance:** Integrated the GNU General Public License v3.0 documentation directly into the Settings tab for full transparency and developer compliance.
-*   **Enhanced Interface Navigation:** Enlarged the directional arrows within the Checkpoint State Allocator interface to improve touch-target accuracy and overall mobile usability.
-*   **Interface Element Boundary Rendering:** Added complete bounding outlines to interface toggle elements across all tabs to ensure visual consistency and a polished layout.
-*   **Dynamic Content Viewport:** Implemented a scrollable interface module within the Global configuration tab. This allows for seamless vertical navigation of extensive parameter lists without overflowing the screen bounds on mobile devices.
-*   **Armeabi-v7a Architecture Support:** Expanded platform compatibility to include native 32-bit Android environments. This utility is now fully operational on both Android64 and Android32 architectures.
-*   **Multi-Slot Storage Framework:** Implemented a robust multi-slot storage system. Users can now manage, save, and load multiple distinct input sequences simultaneously without overwriting previous data.
-*   **Customized Directory Allocation:** Implemented a dedicated file path routing system for sequence storage. All local files are now securely archived in the standard Android directory for streamlined file management and accessibility.
-*   **Sequence Buffer Purge Utility:** Introduced a dedicated interface button designed to instantly flush and clear all active input sequences from the recording buffer, allowing for immediate fresh recordings without manually deleting data.
-*   **Checkpoint State Telemetry Toggle:** Added an optional visual diagnostic notification that triggers upon checkpoint death. This toggle displays the exact frame sequence regression for debugging purposes and can be easily enabled or disabled within the menu settings.
+- **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
+- **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset.
+- **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.
+- **License Info:** Added GPL-3.0 license information directly to the settings menu.
+- **New CKY3 format:** Added a new format ( Not literal named .CKY3, it is just a label.), you now can't transfer the old CKY1 and CKY2 into v1.0.5. For CKY1 (1.0.1) and CKY2 (1.0.2) to work, turn frame fixes off.
+- **Show trajectory:** My actually best update. Draws the future path. Has a slider for the trajectory to become longer.
 
-### Fixed
-*   **Checkpoint State Desync Critical:** Resolved a major engine bug where recording from a checkpoint past input index 114 would cause the sequence cursor to incorrectly regress to 113, resulting in severe sequence corruption. Input logging above index 114 is now fully stable.
-*   **Audio Playback Interruption Critical:** Resolved an engine anomaly where utilizing the Checkpoint State Allocator would inadvertently halt the background music track. The audio engine now correctly resumes and maintains playback upon state transition.
-
-## [1.0.0] - Initial Release
-------------------------------------
+## [1.0.4]
 ### Added
-*   Initial public release of the ChxrCky Utility framework.
-*   Input Sequence Recorder and Re-enactment.
-*   Temporal Step Decoupling.
-*   Time-Scale Modifier and Audio Sync.
-*   Render Loop Rate Decoupling.
-*   Progress Integrity Guard.
-*   Discrete Physics Frame Advancer.
+- **Click Packs:** Integrated custom audio click packs (e.g., Viper 8K) with an adjustable volume slider (up to 200%).
+- **Import GDR:** Added a direct importer for `.gdr` files, allowing seamless migration of macros recorded in other bots.
+- **Input Offset Slider:** Added a dedicated slider to manually adjust input frame offsets for perfect frame-window alignment.
+- **Checkpoint Telemetry:** Added an experimental telemetry toggle for debugging frame desyncs.
+
+## [1.0.3]
+### Added
+- **Public Release:** First stable build of the ChxrCky Macro Bot.
+- **Macro slots:** Added 20 slots of macro saves, so everytime you save, you just gotta slide the slider.
+
+## [1.0.2]
+### Added
+- **Frame Stepper:** Implemented a basic frame-stepper with backstep functionality.
+- **Macro Management:** Added save, load, and clear macro buttons.
+- **License Info:** Added GPL-3.0 license to the source code.
+- **CKY2 format:** Tho not literal, CKY2 is here because the space that CKY1 takes is 5 Bytes.
+- **Noclip:** Allows for the player to pass through solid blocks and spikes without restarting.
+
+## [1.0.1]
+### Added
+- **Speedhack:** Implemented manual speedhack text input to allow for ultra-precise values (e.g., 0.03x) instead of standard sliders.
+- **UI Tweaks:** Basic layout improvements.
+- **CKY1 format:** New format for squeezed releases and inputs, taking 5 Bytes per input and release.
+
+## [1.0.0]
+### Added
+- **Initial Prototype:** Basic framework for recording and playing back player inputs.
+- **Geode Integration:** Successfully hooked into the Geometry Dash physics engine.
+- **Tested Environmental:** Verified working on GD 2.2081 / Geode 5.11.2 (Android).
+- **Macro bot:** To record a level, go to practice mode, then after finishing, playback it.
+- **CKY format:** 8 Bytes per input ( Releases included )
