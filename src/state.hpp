@@ -16,6 +16,8 @@ struct FrameFix {
     uint32_t frame;
     float x1, y1, r1;
     float x2, y2, r2;
+    double yv1 = 0.0, yv2 = 0.0; // vertical velocity of each player (CKY4)
+    bool   hasVel = true;        // false for fixes loaded from old CKY3 files
 };
 
 struct MacroInput {
@@ -60,7 +62,8 @@ inline CCPoint ckyDefaultIconPos() {
 namespace cky {
     constexpr uint32_t MAGIC1 = 0x31594B43; // "CKY1"
     constexpr uint32_t MAGIC2 = 0x32594B43; // "CKY2"
-    constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes)
+    constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes: position + rotation)
+    constexpr uint32_t MAGIC4 = 0x34594B43; // "CKY4" (CKY3 + vertical velocity in frame fixes)
     constexpr int P2_FLAG = 0x100;
     constexpr uint32_t MAX_ENTRIES = 10000000;
     constexpr int MAX_SLOTS = 20;
@@ -81,6 +84,8 @@ namespace cky {
     inline std::vector<FrameFix> fixes;
     inline size_t   fixCursor = 0;
     inline bool     frameFixes = true;
+    inline int      fixInterval = 1;      // record a frame fix every N steps (in 240-TPS steps)
+    inline bool     fixVelocity = true;   // also restore vertical velocity on playback
     inline bool     trajectory = false;
     inline bool     trajCreating = false;
     inline int      trajLen = 200;        // simulated steps (60-480)
@@ -124,7 +129,9 @@ namespace cky {
     inline bool     hudStepShow = true;  // show the frame stepper box (top-left)
     inline bool     hudSpeedShow = true; // show the speedhack box (top-right)
     inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
-    inline bool     backAlways = true;   // also keep the rolling buffer while playing
+    // Rolling rewind buffer while playing. OFF by default: it calls createCheckpoint() (a full
+    // copy of the level state) on EVERY physics step, which is what capped real TPS.
+    inline bool     backAlways = false;
     inline int      backDepth = 240;     // how many steps you can go back (30-600)
 
     // input fixes
@@ -152,6 +159,9 @@ namespace cky {
     };
     inline std::vector<float> const fpsList = {
         30.f, 60.f, 90.f, 120.f, 144.f, 240.f, 360.f, 480.f, 1000.f
+    };
+    inline std::vector<float> const fixIntervalList = {
+        1.f, 2.f, 4.f, 8.f, 15.f, 30.f, 60.f, 120.f, 240.f
     };
     inline std::vector<float> const sizeList = { 0.6f, 0.8f, 1.f, 1.2f, 1.5f };
     inline std::vector<float> const tpsStepList = { 1.f, 5.f, 10.f, 50.f, 100.f, 500.f };
@@ -334,7 +344,7 @@ namespace cky {
     inline bool save() {
         std::ofstream f(slotPath(), std::ios::binary | std::ios::trunc);
         if (!f) return false;
-        wr<uint32_t>(f, MAGIC3);
+        wr<uint32_t>(f, MAGIC4);
         wr<float>(f, macroTps);
         wr<uint32_t>(f, static_cast<uint32_t>(macro.size()));
         for (auto const& entry : macro) {
@@ -347,6 +357,7 @@ namespace cky {
             wr<uint32_t>(f, x.frame);
             wr<float>(f, x.x1); wr<float>(f, x.y1); wr<float>(f, x.r1);
             wr<float>(f, x.x2); wr<float>(f, x.y2); wr<float>(f, x.r2);
+            wr<double>(f, x.yv1); wr<double>(f, x.yv2);
         }
         return f.good();
     }
@@ -371,7 +382,7 @@ namespace cky {
         uint32_t magic = 0, count = 0;
         float t = 240.f;
         if (!rd(f, magic)) return false;
-        if (magic == MAGIC2 || magic == MAGIC3) {
+        if (magic == MAGIC2 || magic == MAGIC3 || magic == MAGIC4) {
             if (!rd(f, t)) return false;
         } else if (magic != MAGIC1) {
             return false;
@@ -392,7 +403,7 @@ namespace cky {
             tmp.push_back({ fr, press != 0, btn });
         }
         std::vector<FrameFix> fx;
-        if (magic == MAGIC3) {
+        if (magic == MAGIC3 || magic == MAGIC4) {
             uint32_t fc = 0;
             if (!rd(f, fc) || fc > MAX_ENTRIES) return false;
             fx.reserve(fc);
@@ -401,6 +412,9 @@ namespace cky {
                 FrameFix x{};
                 if (!rd(f, x.frame) || !rd(f, x.x1) || !rd(f, x.y1) || !rd(f, x.r1)
                     || !rd(f, x.x2) || !rd(f, x.y2) || !rd(f, x.r2)) return false;
+                // CKY3 files have no velocity: yv stays 0 and is skipped on playback
+                if (magic == MAGIC4 && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
+                x.hasVel = (magic == MAGIC4);
                 if (x.frame < lastFix) return false;
                 lastFix = x.frame;
                 fx.push_back(x);

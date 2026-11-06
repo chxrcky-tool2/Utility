@@ -32,7 +32,9 @@ void ckyBackStepClear() {
 // called once per physics step (processCommands) and every update while paused
 void ckyBackStepCapture() {
     auto pl = PlayLayer::get();
-    if (!pl || !cky::backStepOn || (!cky::frozen && !cky::backAlways)) { ckyBackStepClear(); return; }
+    // never snapshot every step while running above 240 TPS: it makes the game fall behind
+    bool rolling = cky::backAlways && cky::effTps() <= 240.f;
+    if (!pl || !cky::backStepOn || (!cky::frozen && !rolling)) { ckyBackStepClear(); return; }
     if (cky::trajCreating) return;
     if (!pl->m_player1 || pl->m_player1->m_isDead) return;
 
