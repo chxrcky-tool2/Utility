@@ -17,6 +17,7 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **HUD Displayer Settings:** Tweaked and improved the on-screen HUD settings for better customizability and display accuracy.
 
 ### Fixed
+- **Back step:** it now works right after pausing. While playing, a few light "anchor" snapshots are kept per second (no TPS lag), so Back jumps to the last one; after that, stepping forward makes exact one-frame back steps again.
 - **TPS slowdown:** The rewind buffer while playing is now off by default (it copied the whole level state every step and capped real TPS), and it is skipped above 240 TPS. (untested)
 
 ## [1.0.4]
