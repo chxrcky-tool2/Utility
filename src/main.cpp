@@ -17,6 +17,13 @@ namespace {
         else return -1;
     }
 
+    // High-TPS bypass (above 240).
+    // GD works out its own step count from the delta using the formula
+    //     step size = min(1, timeWarp) / 240
+    // so just returning a different delta from getModifiedDelta gets re-quantised back to
+    // 240 steps per second (that is why the real TPS stayed at ~241). Instead we make the
+    // game itself think the step size is 1/TPS by shrinking m_timeWarp for the duration of
+    // one update call, then put it back.
     struct TpsScope {
         GJBaseGameLayer* layer = nullptr;
         float orig = 1.f, applied = 1.f;
@@ -102,10 +109,12 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                     ckyHudRefresh();
                     ckyApplyAudio();
                 }
+                ckyBackStepCapture(); // snapshot of the state before this step (for back step)
                 if (cky::pending <= 0) return;
                 --cky::pending;
                 dt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
             } else {
+                ckyBackStepClear(); // running again: old snapshots no longer match
                 float realDt = dt;
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
                 if (sp != 1.f) dt *= sp;
@@ -290,6 +299,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         cky::dirty = false;
         cky::ckpts.clear();
         cky::cpInit = false;
+        ckyBackStepClear();
         cky::recArmed = cky::recording;
         cky::playArmed = cky::playing;
         cky::ncReset();
@@ -316,6 +326,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         }
 
         PlayLayer::resetLevel();
+        ckyBackStepClear();
 
         if (resume) {
             size_t before = cky::macro.size();

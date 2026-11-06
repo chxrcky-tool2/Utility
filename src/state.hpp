@@ -46,6 +46,11 @@ bool ckyTrajHandleDeath(PlayerObject* player); // true = it was a trajectory fak
 void ckyTrajClear();
 bool ckyUiIsImGui();
 void ckyImGuiToggle();
+// frame stepper back step (backstep.cpp)
+void ckyBackStepCapture();
+void ckyBackStepClear();
+bool ckyBackStep();
+size_t ckyBackStepCount();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -114,6 +119,8 @@ namespace cky {
     inline int      clickVol = 100;   // clickbot volume, percent (0-200)
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
+    inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
+    inline int      backDepth = 240;     // how many steps you can go back (30-600)
 
     // input fixes
     inline int      frameOffset = 0;
