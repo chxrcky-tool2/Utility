@@ -178,7 +178,6 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 stepBefore = cky::step;
                 dt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
             } else {
-                if (!cky::backAlways) ckyBackStepClear(); // rolling buffer off: drop old snapshots
                 float realDt = dt;
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
                 if (sp != 1.f) dt *= sp;

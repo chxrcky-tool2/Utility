@@ -3,9 +3,13 @@
 // How it works: while the stepper is paused, a snapshot of the whole level state (the game's own
 // CheckpointObject: players, camera, triggers, groups...) is taken right before every step you
 // advance. Back step loads the previous snapshot and re-syncs the macro bot (step counter, clock,
-// recorded inputs / playback cursor). The buffer is a rolling window of the last steps, kept
-// while playing too (cky::backAlways) so you can pause and go back right away. Turn that off
-// to only snapshot while paused (no cost during play).
+// recorded inputs / playback cursor).
+//
+// Three modes of snapshotting:
+//  - paused:        one snapshot per step you advance (exact one-frame back steps)
+//  - playing, light (default): only a few "anchor" snapshots per second, so pausing and pressing
+//                   back works right away (it jumps to the last anchor) without lagging the game
+//  - playing, full (cky::backAlways, <= 240 TPS): a snapshot every step, exact back steps at once
 #include "state.hpp"
 #include <deque>
 
@@ -15,6 +19,9 @@ namespace {
         cky::Cp info; // step / clock / macro size when the snapshot was taken
     };
     std::deque<Snap> g_ring;
+
+    constexpr float  kAnchorHz   = 20.f; // light mode: anchor snapshots per second of game time
+    constexpr size_t kAnchorKeep = 8;    // light mode: how many anchors are kept (~0.4s at 20 Hz)
 
     void dropSnap(Snap& s) {
         if (s.cp) s.cp->release();
@@ -32,9 +39,15 @@ void ckyBackStepClear() {
 // called once per physics step (processCommands) and every update while paused
 void ckyBackStepCapture() {
     auto pl = PlayLayer::get();
+    if (!pl || !cky::backStepOn) { ckyBackStepClear(); return; }
     // never snapshot every step while running above 240 TPS: it makes the game fall behind
     bool rolling = cky::backAlways && cky::effTps() <= 240.f;
-    if (!pl || !cky::backStepOn || (!cky::frozen && !rolling)) { ckyBackStepClear(); return; }
+    // playing without the full buffer: only take a snapshot every few steps (an "anchor")
+    bool anchorOnly = !cky::frozen && !rolling;
+    if (anchorOnly) {
+        uint32_t stride = static_cast<uint32_t>(std::max(1L, std::lround(cky::effTps() / kAnchorHz)));
+        if ((cky::step % stride) != 0) return;
+    }
     if (cky::trajCreating) return;
     if (!pl->m_player1 || pl->m_player1->m_isDead) return;
 
@@ -61,7 +74,8 @@ void ckyBackStepCapture() {
 
     g_ring.push_back({ cp, { cky::step, cky::frameClock, cky::macro.size(), true } });
 
-    size_t maxSnaps = static_cast<size_t>(std::clamp(cky::backDepth, 30, 600)) + 1;
+    size_t maxSnaps = anchorOnly ? kAnchorKeep
+                                 : static_cast<size_t>(std::clamp(cky::backDepth, 30, 600)) + 1;
     while (g_ring.size() > maxSnaps) {
         dropSnap(g_ring.front());
         g_ring.pop_front();
