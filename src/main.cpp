@@ -87,14 +87,19 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         double total = std::min(static_cast<double>(dt) + static_cast<double>(m_extraDelta), 0.25);
         double stepsD = std::floor(total / modifier + 1e-4);
         int steps = static_cast<int>(std::max(0.0, stepsD));
+        // paused stepper: one press = exactly one step, and no leftover time carried over
+        // (leftover time after a back step made the game replay all the way to the old frame)
+        if (cky::frozen) steps = std::min(steps, 1);
         double result = steps * modifier;
 
-        m_extraDelta = static_cast<float>(total - result);
+        m_extraDelta = cky::frozen ? 0.f : static_cast<float>(total - result);
         return static_cast<float>(result);
     }
 
     void update(float dt) {
         bool inLevel = PlayLayer::get() != nullptr;
+        bool singleRun = false;      // this update is one paused frame-step press
+        uint32_t stepBefore = cky::step;
         if (inLevel) {
             if (cky::cheating()) cky::dirty = true;
 
@@ -112,6 +117,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 ckyBackStepCapture(); // snapshot of the state before this step (for back step)
                 if (cky::pending <= 0) return;
                 --cky::pending;
+                singleRun = true;
+                stepBefore = cky::step;
                 dt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
             } else {
                 if (!cky::backAlways) ckyBackStepClear(); // rolling buffer off: drop old snapshots
@@ -133,6 +140,13 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 GJBaseGameLayer::update(dt);
             }
             forceHitboxVisible();
+
+            // a single frame-step press should move the counter by exactly 1
+            if (singleRun && cky::step > stepBefore + 1) {
+                log::warn("[cky] frame step ran {} steps (step {} -> {}, extraDelta {:.5f})",
+                    cky::step - stepBefore, stepBefore, cky::step, m_extraDelta);
+                ckyOverlayShow(fmt::format("Frame step ran {} steps", cky::step - stepBefore), false);
+            }
 
             // if real TPS is far below the target, say so in the Geode log
             g_diagTimer += dt;

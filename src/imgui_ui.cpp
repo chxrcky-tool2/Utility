@@ -262,6 +262,29 @@ namespace {
             cky::hudScale = hs;
             ckyApplyHudScale();
         }
+        if (ImGui::TreeNode("HUD settings")) {
+            ImGui::Checkbox("Show frame stepper", &cky::hudStepShow);
+            ImGui::Checkbox("Show speedhack", &cky::hudSpeedShow);
+            bool fz = cky::frozen;
+            if (ImGui::Checkbox("Frame stepper", &fz)) {
+                cky::frozen = fz;
+                cky::pending = 0;
+                ckyApplyAudio();
+            }
+            bool sh = cky::speedOn;
+            if (ImGui::Checkbox("Speedhack", &sh)) {
+                cky::speedOn = sh;
+                ckyApplyAudio();
+            }
+            bool bs = cky::backStepOn;
+            if (ImGui::Checkbox("Back step", &bs)) {
+                cky::backStepOn = bs;
+                if (!bs) ckyBackStepClear();
+            }
+            ImGui::Checkbox("Buffer while playing", &cky::backAlways);
+            ckyHudRefresh();
+            ImGui::TreePop();
+        }
         bool sp = cky::startPosOn;
         if (ImGui::Checkbox("StartPos switcher", &sp)) {
             cky::startPosOn = sp;
