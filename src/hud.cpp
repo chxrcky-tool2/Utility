@@ -7,13 +7,13 @@ namespace {
     constexpr int HudStepLabel = 10, HudSpeedLabel = 11, HudNcLabel = 12;
     constexpr int HudStepInfo = 15, HudSpeedInfo = 16;
     // button tags
-    constexpr int HudFreeze = 1, HudStep = 2, HudSpeedDown = 3, HudSpeedUp = 4, HudClock = 5;
+    constexpr int HudFreeze = 1, HudStep = 2, HudSpeedDown = 3, HudSpeedUp = 4, HudClock = 5, HudBack = 6;
     // glyph / pill tags
     constexpr int TagPillA = 81, TagPillB = 82;   // pill: normal / alternate look
     constexpr int TagGlyphA = 61, TagGlyphB = 62; // freeze button: pause / play
 
     constexpr float PillH = 44.f;
-    constexpr float StepW = 158.f;
+    constexpr float StepW = 190.f;
     constexpr float SpeedW = 158.f;
     constexpr float BtnD = 28.f;
     constexpr float Margin = 10.f;
@@ -126,6 +126,16 @@ static CCNode* ckyStepBtn() {
     return n;
 }
 
+// back step: mirrored "step" glyph (bar on the left, triangle pointing left)
+static CCNode* ckyBackBtn() {
+    auto n = ckyBtnFace(themeHi());
+    float c = BtnD / 2.f;
+    auto g = ckyGlyphNode(n);
+    ckyTri(g, { c + 6.f, c - 6.f }, { c + 6.f, c + 6.f }, { c - 3.f, c }, kGlyph);
+    ckyRect(g, c - 6.6f, c - 6.f, c - 4.2f, c + 6.f, kGlyph);
+    return n;
+}
+
 static CCNode* ckySignBtn(bool plus) {
     auto n = ckyBtnFace(themeHi());
     float c = BtnD / 2.f;
@@ -214,8 +224,9 @@ public:
         sm->setPosition({ 0.f, 0.f });
         sg->addChild(sm);
         addBtn(sm, ckyPauseBtn(), menu_selector(CkyHud::onFreeze), HudFreeze, 20.f, rowY);
-        addBtn(sm, ckyStepBtn(), menu_selector(CkyHud::onStep), HudStep, 52.f, rowY);
-        addLabel(sg, HudStepLabel, 0.34f, { 74.f, rowY }, { 0.f, 0.5f });
+        addBtn(sm, ckyBackBtn(), menu_selector(CkyHud::onBack), HudBack, 52.f, rowY);
+        addBtn(sm, ckyStepBtn(), menu_selector(CkyHud::onStep), HudStep, 84.f, rowY);
+        addLabel(sg, HudStepLabel, 0.34f, { 106.f, rowY }, { 0.f, 0.5f });
         addLabel(sg, HudStepInfo, 0.2f, { 10.f, -37.f }, { 0.f, 0.5f })->setOpacity(190);
 
         // ---------- top-right: speedhack (origin = pill's top-right corner) ----------
@@ -264,6 +275,19 @@ public:
             return;
         }
         if (cky::pending < 100) cky::pending = cky::pending + 1;
+    }
+
+    void onBack(CCObject*) {
+        if (!cky::frozen) { // first press just pauses, like the step button
+            cky::frozen = true;
+            cky::pending = 0;
+            ckyHudRefresh();
+            ckyApplyAudio();
+            return;
+        }
+        if (!cky::backStepOn) { ckyNotify("Back step is off", false); return; }
+        if (!ckyBackStep()) ckyNotify("Nothing further back", false);
+        ckyHudRefresh();
     }
 
     void onClock(CCObject*) {
@@ -343,6 +367,7 @@ void ckyHudRefresh(CCNode* hud) {
         std::string info = cky::frozen ? "PAUSED | " : "";
         if (!mode.empty()) info += mode + " | ";
         info += fmt::format("In {} | CP {}", cky::macro.size(), cky::ckpts.size());
+        if (cky::frozen && cky::backStepOn) info += fmt::format(" | BK {}", ckyBackStepCount());
         ckySetLabel(sg, HudStepInfo, info, cky::frozen ? ccc3(255, 205, 120) : infoCol);
 
         if (auto a = sg->getChildByTag(TagPillA)) a->setVisible(!cky::frozen);
