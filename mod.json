@@ -3,9 +3,9 @@
   "gd": {
     "android": "2.2081"
   },
-  "id": "chxrcky.cky_menu",
+  "id": "chxrcky.cky",
   "name": "ChxrCky",
-  "version": "v1.0.4",
+  "version": "v1.0.5",
   "developer": "ChxrCky",
   "description": "Lightweight .cky macro recorder/player.",
   "settings": {
