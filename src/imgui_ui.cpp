@@ -251,8 +251,18 @@ namespace {
             cky::ncReset();
         }
         ImGui::Checkbox("Safe mode", &cky::safeMode);
-        ImGui::Checkbox("Show accuracy", &cky::ncShowAcc);
-        ImGui::Checkbox("Show deaths", &cky::ncShowDeaths);
+    }
+
+    void tabLabels() {
+        bool ch = false;
+        ch |= ImGui::Checkbox("CPS", &cky::clickHudOn);
+        ch |= ImGui::Checkbox("FPS", &cky::lblFps);
+        ch |= ImGui::Checkbox("Noclip accuracy", &cky::ncShowAcc);
+        ch |= ImGui::Checkbox("Noclip deaths", &cky::ncShowDeaths);
+        ch |= ImGui::Checkbox("Startpos run", &cky::lblRun);
+        ch |= ImGui::Checkbox("Level time", &cky::lblTime);
+        ch |= ImGui::Checkbox("Best run", &cky::lblBest);
+        if (ch) cky::labelsSave(); // remembered between launches
     }
 
     void tabDisplay() {
@@ -316,7 +326,6 @@ namespace {
             ckySetStartPosVisible(cky::startPosOn);
         }
         ImGui::Checkbox("Input overlay", &cky::overlayOn);
-        ImGui::Checkbox("Click telemetry", &cky::clickHudOn);
 
         bool tj = cky::trajectory;
         if (ImGui::Checkbox("Show trajectory", &tj)) {
@@ -401,6 +410,7 @@ namespace {
                 if (ImGui::BeginTabItem("Global"))   { tabGlobal();   ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Player"))   { tabPlayer();   ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Display"))  { tabDisplay();  ImGui::EndTabItem(); }
+                if (ImGui::BeginTabItem("Labels"))   { tabLabels();   ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Clicks"))   { tabClicks();   ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();

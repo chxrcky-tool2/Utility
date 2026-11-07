@@ -90,6 +90,9 @@ namespace {
         x.r2 = l->m_player2->getRotation();
         x.yv1 = ckyGetYVel(l->m_player1);
         x.yv2 = ckyGetYVel(l->m_player2);
+        x.e1 = cky::captureExtra(l->m_player1);
+        x.e2 = cky::captureExtra(l->m_player2);
+        x.hasExtra = true;
         cky::fixes.push_back(x);
     }
 
@@ -100,12 +103,14 @@ namespace {
             ckySetLastPos(l->m_player1, CCPoint(f.x1, f.y1));
             l->m_player1->setRotation(f.r1);
             if (cky::fixVelocity && f.hasVel) ckySetYVel(l->m_player1, f.yv1);
+            if (cky::fixVelocity && f.hasExtra) cky::applyExtra(l->m_player1, f.e1);
         }
         if (l->m_gameState.m_isDualMode && (f.x2 != 0.f || f.y2 != 0.f)) {
             l->m_player2->setPosition(CCPoint(f.x2, f.y2));
             ckySetLastPos(l->m_player2, CCPoint(f.x2, f.y2));
             l->m_player2->setRotation(f.r2);
             if (cky::fixVelocity && f.hasVel) ckySetYVel(l->m_player2, f.yv2);
+            if (cky::fixVelocity && f.hasExtra) cky::applyExtra(l->m_player2, f.e2);
         }
     }
 
@@ -132,14 +137,22 @@ namespace {
             if (b && !bad) { dx = x; dy = y; dv = v; }
             bad |= b;
         }
+        // state flags (on ground / upside down / dashing / jump buffered) must match too
+        uint8_t fm = 0;
+        if (f.hasExtra) {
+            if (f.x1 != 0.f || f.y1 != 0.f) fm |= cky::extraMismatch(cky::captureExtra(l->m_player1), f.e1);
+            if (l->m_gameState.m_isDualMode && (f.x2 != 0.f || f.y2 != 0.f))
+                fm |= cky::extraMismatch(cky::captureExtra(l->m_player2), f.e2);
+            bad |= (fm != 0);
+        }
         ++cky::verifyChecks;
         if (!bad) return false;
 
         ++cky::verifyMisses;
         if (cky::firstDivFrame < 0) {
             cky::firstDivFrame = f.frame;
-            log::warn("[cky] first desync at frame {}: dx={:.5f} dy={:.5f} dyVel={:.5f} (our step {}, game time frame {:.1f})",
-                f.frame, dx, dy, dv, cky::step, ckyLevelFrame(l->m_gameState));
+            log::warn("[cky] first desync at frame {}: dx={:.5f} dy={:.5f} dyVel={:.5f} stateFlagsDiff={:#04x} (our step {}, game time frame {:.1f})",
+                f.frame, dx, dy, dv, fm, cky::step, ckyLevelFrame(l->m_gameState));
             ckyOverlayShow(fmt::format("Desync @ frame {} (dy {:.3f}, dvy {:.3f})", f.frame, dy, dv), false);
         }
         return true;
@@ -222,6 +235,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
             if ((cky::hudTick % 30) == 0 && !ckyHudNode()) {
                 ckyBuildHud(PlayLayer::get());
                 ckyBuildStartPos(PlayLayer::get());
+                ckyBuildLabels(PlayLayer::get());
             }
 
             if (cky::frozen) {
@@ -477,6 +491,13 @@ class $modify(CkyPlayLayer, PlayLayer) {
         PlayLayer::loadFromCheckpoint(cp);
         if (!cp || !cky::practiceFixes) return;
         if (!((cky::recording && cky::recArmed) || (cky::playing && cky::playArmed))) return;
+        // playback resumes from a checkpoint: let go of jump first (what xdBot does after applyData),
+        // so the replayed press is a fresh press and is not swallowed or doubled. The held buttons
+        // are re-pressed on the next step by holdFixPending.
+        if (cky::playing && cky::playArmed) {
+            if (m_player1) m_player1->releaseButton(static_cast<PlayerButton>(1));
+            if (m_player2) m_player2->releaseButton(static_cast<PlayerButton>(1));
+        }
         auto it = g_cpStates.find(cp);
         if (it == g_cpStates.end()) return;
         cky::restorePlayer(m_player1, it->second.p1);
@@ -504,6 +525,9 @@ class $modify(CkyPlayLayer, PlayLayer) {
         ckyBuildHud(this);
         ckyBuildStartPos(this);
         ckyBuildOverlay(this);
+        ckyBuildLabels(this);
+        ckyRunReset();
+        ckyRunBegin();
         ckyApplyAudio();
         ckyApplyHitboxes();
     }
@@ -524,6 +548,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         }
 
         PlayLayer::resetLevel();
+        ckyRunBegin(); // labels: a new attempt starts here (level start, startpos or checkpoint)
         ckyBackStepClear();
         ckyInputLogReset();
         if (!resumePlay) cky::verifyReset();
@@ -579,10 +604,12 @@ class $modify(CkyPlayLayer, PlayLayer) {
             cky::ncBlocked = true;
             return;
         }
+        ckyRunDeath(); // labels: remember where this run ended
         PlayLayer::destroyPlayer(player, object);
     }
 
     void levelComplete() {
+        ckyRunComplete();
         // auto-stop: recording ends when you reach the end of the level
         if (cky::recording) {
             cky::recording = false;

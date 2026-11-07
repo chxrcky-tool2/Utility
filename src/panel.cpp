@@ -62,6 +62,13 @@ namespace {
         L_SW_OUT = 240, L_SW_IN
     };
 
+    // Labels tab (kept above the other tag ranges). The tab itself is page 8; its button sits
+    // between Display and Clicks, so page numbers 6 / 7 (HUD settings / Hitbox trail) stay as they are.
+    enum : int {
+        T_LBL_FPS = 250, T_LBL_RUN, T_LBL_TIME, T_LBL_BEST,
+        PAGE_LABELS = 8
+    };
+
     constexpr float ROW = 28.f;
     constexpr float VIEW_TOP = 90.f;
     constexpr float VIEW_BOTTOM = -112.f;
@@ -353,10 +360,11 @@ public:
         m_tabMenu = CCMenu::create();
         m_tabMenu->setPosition({0.f, 0.f});
         this->addChild(m_tabMenu, 4);
-        static char const* names[6] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings" };
-        for (int i = 0; i < 6; ++i) {
-            makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + i,
-                    -149.f, 60.f - 32.f * static_cast<float>(i), 104.f, 28.f, names[i], kTab, 0.4f);
+        static char const* names[7] = { "Bot", "Global", "Player", "Display", "Labels", "Clicks", "Settings" };
+        static int const pages[7]   = { 0, 1, 2, 3, PAGE_LABELS, 4, 5 };
+        for (int i = 0; i < 7; ++i) {
+            makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + pages[i],
+                    -149.f, 64.f - 27.f * static_cast<float>(i), 104.f, 24.f, names[i], kTab, 0.4f);
         }
 
         auto closeMenu = CCMenu::create();
@@ -392,8 +400,8 @@ public:
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_UP, 112.f, 113.f, 38.f, 18.f, "Up", kAccent, 0.35f);
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_DN, 156.f, 113.f, 38.f, 18.f, "Dn", kAccent, 0.35f);
 
-        static char const* names[8] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
-                                        "HUD settings", "Hitbox trail" };
+        static char const* names[9] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
+                                        "HUD settings", "Hitbox trail", "Labels" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
@@ -434,8 +442,6 @@ public:
         case 2:
             rowPill("Noclip", T_NOCLIP);
             rowPill("Safe mode", T_SAFE);
-            rowPill("Show accuracy", T_NCACC);
-            rowPill("Show deaths", T_NCDEATH);
             break;
         case 3:
             rowPill("Hitboxes", T_HITBOX);
@@ -452,7 +458,6 @@ public:
             rowValue("HUD size", B_HUDSZ_DN, B_HUDSZ_UP, L_HUDSZ);
             rowPill("StartPos switcher", T_STARTPOS);
             rowPill("Input overlay", T_OVERLAY);
-            rowPill("Click telemetry", T_CLICKHUD);
             rowPill("Show trajectory", T_TRAJ);
             rowValue("Trajectory length", B_TLEN_DN, B_TLEN_UP, L_TLEN);
             break;
@@ -485,6 +490,15 @@ public:
             rowWide("Back to Display", B_TR_BACK);
             break;
         }
+        case PAGE_LABELS:
+            rowPill("CPS", T_CLICKHUD);
+            rowPill("FPS", T_LBL_FPS);
+            rowPill("Noclip accuracy", T_NCACC);
+            rowPill("Noclip deaths", T_NCDEATH);
+            rowPill("Startpos run", T_LBL_RUN);
+            rowPill("Level time", T_LBL_TIME);
+            rowPill("Best run", T_LBL_BEST);
+            break;
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
             rowWide("Reset icon position", B_RESETPOS);
@@ -508,9 +522,10 @@ public:
     }
 
     void refreshTabs() {
-        for (int i = 0; i < 6; ++i) {
+        int active = (m_tab == 6 || m_tab == 7) ? 3 : m_tab; // HUD settings / Hitbox trail belong to Display
+        for (int i = 0; i <= PAGE_LABELS; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
-            paint(it, i == (m_tab >= 6 ? 3 : m_tab) ? kAccent : kTab);
+            paint(it, i == active ? kAccent : kTab);
         }
     }
 
@@ -536,6 +551,10 @@ public:
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
         setPill(T_PFIX, cky::practiceFixes);
+        setPill(T_LBL_FPS, cky::lblFps);
+        setPill(T_LBL_RUN, cky::lblRun);
+        setPill(T_LBL_TIME, cky::lblTime);
+        setPill(T_LBL_BEST, cky::lblBest);
         setPill(T_HUDSTEP, cky::hudStepShow);
         setPill(T_HUDSPEED, cky::hudSpeedShow);
         setPill(T_BACKSTEP, cky::backStepOn);
@@ -721,12 +740,25 @@ public:
             cky::backStepOn = !cky::backStepOn;
             if (!cky::backStepOn) ckyBackStepClear();
             break;
+        case T_LBL_FPS:
+            cky::lblFps = !cky::lblFps;
+            break;
+        case T_LBL_RUN:
+            cky::lblRun = !cky::lblRun;
+            break;
+        case T_LBL_TIME:
+            cky::lblTime = !cky::lblTime;
+            break;
+        case T_LBL_BEST:
+            cky::lblBest = !cky::lblBest;
+            break;
         case T_BACKALWAYS:
             cky::backAlways = !cky::backAlways;
             if (!cky::backAlways && !cky::frozen) ckyBackStepClear();
             break;
         default: break;
         }
+        cky::labelsSave(); // label switches are remembered between launches
         refresh();
         ckyHudRefresh();
     }
