@@ -598,4 +598,9 @@ class $modify(CkyPlayLayer, PlayLayer) {
     }
 };
 
+// create macros/ and the per-theme macro folders in the mod save folder
+$on_mod(Loaded) {
+    cky::makeMacroFolders();
+}
+
 // END OF FILE (main.cpp)
