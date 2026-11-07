@@ -64,6 +64,13 @@ size_t ckyBackStepCount();
 void ckyBackStepFinish();
 void ckyInputLog(bool down, int playerButton);
 void ckyInputLogReset();
+// hitbox trail (hitboxtrail.cpp)
+void ckyTrailCapture(GJBaseGameLayer* layer);
+void ckyTrailRewind(uint32_t step);
+void ckyTrailReset();
+void ckyTrailApply();
+void ckyTrailSave();
+void ckyTrailLoad();
 
 inline CCPoint ckyDefaultIconPos() {
     auto win = CCDirector::get()->getWinSize();
@@ -123,6 +130,11 @@ namespace cky {
     inline bool     safeMode = true;
     inline bool     dirty = false;
     inline bool     hitboxes = false;
+    // hitbox trail: RGBA (0-1) of the outer and inner hitbox, length in physics steps
+    inline bool     hitboxTrail = false;
+    inline int      trailLen = 120;
+    inline float    trailOuter[4] = { 1.f, 0.25f, 0.25f, 1.f };
+    inline float    trailInner[4] = { 0.30f, 0.55f, 1.f, 1.f };
     inline bool     startPosOn = true;
     inline bool     overlayOn = true;
     inline bool     clickHudOn = true;

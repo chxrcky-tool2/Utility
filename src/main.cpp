@@ -221,12 +221,22 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                     int n = cky::resimLeft;
                     cky::resimLeft = 0;
                     float stepDt = (cky::effTps() > 240.f ? 1.0005f : 1.f) / cky::effTps();
-                    for (int i = 0; i < n; ++i) {
+                    // Run until the STEP COUNTER reaches the goal, not "n update() calls": one
+                    // update() can run 0 or 2 physics steps (float rounding / m_extraDelta), and
+                    // counting calls would leave the re-simulation off by a step.
+                    uint32_t goal = cky::step + static_cast<uint32_t>(n);
+                    int guard = n * 4 + 8;
+                    while (cky::step < goal && guard-- > 0) {
                         if (!m_player1 || m_player1->m_isDead) break;
                         HitboxScope hb;
                         TpsScope tps(this);
                         GJBaseGameLayer::update(stepDt);
                     }
+                    if (cky::step != goal) {
+                        log::warn("[cky] backstep re-sim ended on step {} (wanted {})", cky::step, goal);
+                        ckyOverlayShow(fmt::format("Re-sim off: step {} / {}", cky::step, goal), false);
+                    }
+                    m_extraDelta = 0.f; // drop any leftover time from the re-simulation
                     cky::resimming = false;
                     ckyBackStepFinish();
                     return;
@@ -380,6 +390,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
             }
 
+            ckyTrailCapture(this); // hitbox trail: this step's hitboxes (after any frame fix)
+
             if (cky::noclip) {
                 cky::ncFrames = cky::ncFrames + 1;
                 if (cky::ncBlocked) {
@@ -405,8 +417,10 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
             if (cky::resimming && !cky::injecting) return;   // re-simulation only uses logged inputs
             if (cky::playing && !cky::injecting) return;
 
-            if (down) ckyTelemetryPress();
-            ckyClickSound(down, isPlayer1);
+            if (!cky::resimming) { // a back-step re-simulation must stay silent
+                if (down) ckyTelemetryPress();
+                ckyClickSound(down, isPlayer1);
+            }
             if (!cky::injecting) ckyInputLog(down, button | (isPlayer1 ? 0 : cky::P2_FLAG));
 
             // recording only runs after a level restart (armed)

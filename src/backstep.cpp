@@ -157,6 +157,8 @@ void ckyBackStepFinish() {
     cky::resimLeft = 0;
     cky::resimHeld.clear();
 
+    ckyTrailRewind(cky::step); // hitbox trail: forget the steps we just went back over
+
     // inputs from the step we are now at (and later) are in the "future": forget them
     while (!cky::inputLog.empty() && cky::inputLog.back().step >= cky::step) cky::inputLog.pop_back();
 
@@ -169,6 +171,28 @@ void ckyBackStepFinish() {
     size_t macroSize = 0;
     while (macroSize < cky::macro.size() && cky::macro[macroSize].frame < cf) ++macroSize;
     cky::Cp info{ cky::step, cky::frameClock, macroSize, true };
+
+    // Drift check: after anchor load + re-simulation, how far is the player from the recorded
+    // frame fix for this exact step? (must run BEFORE rewindTo, which drops those fixes)
+    if (auto pl = PlayLayer::get(); pl && pl->m_player1 && !cky::fixes.empty()) {
+        int64_t want = static_cast<int64_t>(cf)
+            - ((cky::playing && cky::playArmed) ? static_cast<int64_t>(cky::frameOffset) : 0);
+        auto it = std::lower_bound(cky::fixes.begin(), cky::fixes.end(), want,
+            [](FrameFix const& f, int64_t v) { return static_cast<int64_t>(f.frame) < v; });
+        if (it != cky::fixes.end() && static_cast<int64_t>(it->frame) == want) {
+            auto* p = pl->m_player1;
+            double dx = std::abs(static_cast<double>(p->getPositionX()) - it->x1);
+            double dy = std::abs(static_cast<double>(p->getPositionY()) - it->y1);
+            double dv = 0.0;
+            if constexpr (requires { p->m_yVelocity; }) {
+                if (it->hasVel) dv = std::abs(static_cast<double>(p->m_yVelocity) - it->yv1);
+            }
+            bool bad = dx > cky::verifyTolPos || dy > cky::verifyTolPos || dv > cky::verifyTolVel;
+            log::info("[cky] backstep drift @ frame {}: dx={:.5f} dy={:.5f} dyVel={:.5f} {}",
+                want, dx, dy, dv, bad ? "DRIFT" : "ok");
+            if (bad) ckyOverlayShow(fmt::format("Backstep drift (dy {:.4f}, dvy {:.4f})", dy, dv), false);
+        }
+    }
 
     if (cky::recording && cky::recArmed) {
         cky::rewindTo(info);              // cuts the recorded inputs back to this step
