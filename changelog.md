@@ -3,6 +3,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 
 ## [1.0.5]
 ### Added
+- **Cat theme animations (.meow):** near-white pink look with peach pink accents. Click/tap anywhere in the menu spawns a small paw print that floats up and fades (max 8 alive, clipped to the menu, so it never renders outside). 13 static background paws at 0.4 opacity in different sizes (drawn once in Cocos). Springy button bounce, cat-ear toggle box that pops a paw in. Works in both the Cocos panel and the ImGui menu.
+- **Molten rocks theme (.lava):** sharp chamfered (hexagonal) corners on windows, buttons and toggle boxes, glowing orange heated-metal gradient border, and tiny rising embers from the bottom of the window (max 16 alive, 30 Hz in Cocos). Cocos toggle is a magma box with an orange check. Works in both the Cocos panel and the ImGui menu.
+- **Cky button:** now a true circle (64-sided polygons), 0.5 opacity while idle and 1.0 the instant it is touched.
 - **Practice fixes:** the full player state (dash, slope, buffered jump, collision, velocity, ...) is saved with every practice checkpoint and every back-step anchor and re-applied after the game loads it, because the game's own checkpoint only restores part of it. Toggle: Bot tab (Cocos) / Bot section (ImGui).
 - **Desync log:** the first-desync and sync-check log lines now also show the game's own time-based frame next to our step counter.
 - **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step.
