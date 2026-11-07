@@ -22,26 +22,16 @@ namespace {
     ccColor4F const kGlyph  = { 0.88f, 1.00f, 1.00f, 1.f };
     ccColor4F const kFrozen = { 1.00f, 0.82f, 0.30f, 1.f };
 
-    // same colours as the ImGui / Cocos menu themes:
-    // Neon, Ocean, Forest, Sunset, Mono, Cat, Vintage, Sky, Lavender, Rose
-    ccColor4F const kThemeHi[cky::ThemeCount] = {
-        { 0.93f, 0.30f, 0.50f, 1.f }, { 0.28f, 0.88f, 0.82f, 1.f },
-        { 0.30f, 0.76f, 0.40f, 1.f }, { 1.00f, 0.62f, 0.22f, 1.f },
-        { 0.72f, 0.72f, 0.76f, 1.f }, { 1.00f, 0.77f, 0.20f, 1.f },
-        { 0.85f, 0.70f, 0.40f, 1.f }, { 0.45f, 0.78f, 1.00f, 1.f },
-        { 0.75f, 0.62f, 1.00f, 1.f }, { 1.00f, 0.68f, 0.80f, 1.f }
-    };
-    ccColor4F const kThemeLo[cky::ThemeCount] = {
-        { 0.62f, 0.14f, 0.30f, 1.f }, { 0.03f, 0.34f, 0.56f, 1.f },
-        { 0.10f, 0.42f, 0.26f, 1.f }, { 0.72f, 0.20f, 0.34f, 1.f },
-        { 0.30f, 0.30f, 0.33f, 1.f }, { 0.36f, 0.28f, 0.42f, 1.f },
-        { 0.48f, 0.32f, 0.20f, 1.f }, { 0.20f, 0.45f, 0.78f, 1.f },
-        { 0.42f, 0.30f, 0.72f, 1.f }, { 0.82f, 0.38f, 0.58f, 1.f }
-    };
-
+    // same colours as the ImGui / Cocos menu themes (all defined in themes.hpp)
     int themeIdx() { return std::clamp(cky::theme, 0, cky::ThemeCount - 1); }
-    ccColor4F themeHi() { return kThemeHi[themeIdx()]; }
-    ccColor4F themeLo() { return kThemeLo[themeIdx()]; }
+    ccColor4F themeHi() {
+        auto const& v = cky::kThemeDefs[themeIdx()].hi;
+        return { v[0], v[1], v[2], 1.f };
+    }
+    ccColor4F themeLo() {
+        auto const& v = cky::kThemeDefs[themeIdx()].lo;
+        return { v[0], v[1], v[2], 1.f };
+    }
     // dark panel tinted with the theme colour
     ccColor4F themePanel() {
         auto lo = themeLo();
