@@ -572,6 +572,13 @@ public:
         setText(L_OFF, fmt::format("{:+d}", cky::frameOffset));
         setText(L_FI, fmt::format("{}", cky::fixInterval));
         setText(L_THEME, thm().name);
+        // long names (e.g. "Molten rocks") shrink so they still fit between the +/- buttons
+        if (m_rows) {
+            if (auto l = typeinfo_cast<CCLabelBMFont*>(m_rows->getChildByTag(L_THEME))) {
+                size_t len = std::strlen(thm().name);
+                l->setScale(len > 8 ? 0.4f * 8.f / static_cast<float>(len) : 0.4f);
+            }
+        }
 
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))

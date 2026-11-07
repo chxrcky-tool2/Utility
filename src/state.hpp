@@ -2,6 +2,7 @@
 #include <Geode/Geode.hpp>
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -377,20 +378,37 @@ namespace cky {
         return Mod::get()->getSaveDir();
     }
 
-    // Macros are saved with the current theme's name as the file extension
-    // (Stereo_Madness_1_slot1.sea, ...slot1.Au, ...). Inside it is the same CKY format whatever
-    // the extension is. Old ".cky" files and files saved under any other theme still load.
-    inline std::filesystem::path slotPathExt(std::string const& ext) {
-        return macroDir() / fmt::format("{}_{}_slot{}{}", levelNameSafe(), levelId(), slot, ext);
+    // Saved macros live in <mod save dir>/macros/ (Android: com.geode.launcher/.../save/geode/mods/chxrcky.cky/macros),
+    // one folder per theme ("Cat theme macros", "Vintage theme macros", ...). A theme's folder holds files
+    // with that theme's extension: <level>_<id>_slot<N>.meow, ...slot1.vinyl, ...slot1.lava, ...
+    // Inside it is the same CKY format whatever the extension. Old ".cky" macros still load.
+    inline std::filesystem::path themeMacroDir(int t) {
+        auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
+        return Mod::get()->getSaveDir() / "macros" / fmt::format("{} theme macros", d.name);
     }
 
-    // where a new macro is written: the current theme's extension
+    // creates macros/ and one folder per theme (called when the mod loads, so they are there to browse)
+    inline void makeMacroFolders() {
+        std::error_code ec;
+        for (int i = 0; i < ThemeCount; ++i) std::filesystem::create_directories(themeMacroDir(i), ec);
+    }
+
+    // the file this level + slot has under theme t
+    inline std::filesystem::path slotFile(int t) {
+        auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
+        return themeMacroDir(t) / fmt::format("{}_{}_slot{}{}", levelNameSafe(), levelId(), slot, d.ext);
+    }
+
+    // where a new macro is written: the current theme's folder + extension
     inline std::filesystem::path slotPath() {
-        return slotPathExt(kThemeDefs[std::clamp(theme, 0, ThemeCount - 1)].name);
+        std::error_code ec;
+        std::filesystem::create_directories(themeMacroDir(theme), ec);
+        return slotFile(theme);
     }
 
-    // the macro to read: the most recently saved file among the current theme's extension,
-    // every other theme's extension and the legacy ".cky". Empty path if there is none.
+    // the macro to read: the most recently saved file among every theme's folder
+    // (current theme first, so it wins a tie) and the legacy <game>/macros/*.cky.
+    // Empty path if there is none.
     inline std::filesystem::path slotFind() {
         std::filesystem::path best;
         std::filesystem::file_time_type bestTime{};
@@ -401,9 +419,9 @@ namespace cky {
             if (ec) return;
             if (best.empty() || t > bestTime) { best = std::move(p); bestTime = t; }
         };
-        consider(slotPath());            // first, so the current theme wins a tie
-        consider(slotPathExt(".cky"));
-        for (auto const& d : kThemeDefs) consider(slotPathExt(d.name));
+        consider(slotFile(theme));
+        for (int i = 0; i < ThemeCount; ++i) consider(slotFile(i));
+        consider(macroDir() / fmt::format("{}_{}_slot{}.cky", levelNameSafe(), levelId(), slot));
         return best;
     }
 
