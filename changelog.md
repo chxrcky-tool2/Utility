@@ -7,8 +7,8 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **Desync log:** the first-desync and sync-check log lines now also show the game's own time-based frame next to our step counter.
 - **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step.
 - **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
-- **Theme Engine:** 20 UI themes, named in dot style: .ne, .sea, .leaf, .dusk, .null, .meow, .vinyl, .cloud, .lilac, .thorn, .tech, .red, .glitch, .Au, .earth, .U, .vamp, .lava, .mojito and .ice. Ocean got a richer aqua-to-deep-blue palette.
-- **Theme = macro format:** macros are now saved with the active theme's name as the file extension (e.g. `Level_123_slot1.sea`, `.Au`, `.vamp`). Same CKY data inside. Loading takes the most recently saved file among every theme extension and the old `.cky`, so changing theme never hides a macro and old macros keep working.
+- **Theme Engine:** 20 UI themes: Neon, Ocean, Forest, Sunset, Mono, Cat, Vintage, Sky, Lavender, Rose, Cyber, Crimson, Matrix, Gold, Aurora, Toxic, Dracula, Molten rocks, Mint and Arctic. Ocean got a richer aqua-to-deep-blue palette.
+- **Theme = macro format:** every theme has its own macro file extension (Neon `.ne`, Ocean `.sea`, Forest `.leaf`, Sunset `.dusk`, Mono `.null`, Cat `.meow`, Vintage `.vinyl`, Sky `.cloud`, Lavender `.lilac`, Rose `.thorn`, Cyber `.tech`, Crimson `.red`, Matrix `.glitch`, Gold `.Au`, Aurora `.earth`, Toxic `.U`, Dracula `.vamp`, Molten rocks `.lava`, Mint `.mint`, Arctic `.ice`). Macros are saved in a `macros` folder in the mod's save folder (`com.geode.launcher/.../geode/mods/chxrcky.cky/macros`), one folder per theme (`Cat theme macros`, `Vintage theme macros`, ...). Loading takes the most recently saved file across all theme folders, so changing theme never hides a macro.
 - **Theme table:** all themes now live in one place, `src/themes.hpp`, shared by the Cocos menu, the ImGui menu and the HUD.
 - **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.
 - **License Info:** Added GPL-3.0 license information directly to the settings menu.
@@ -22,7 +22,7 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **HUD Displayer Settings:** Tweaked and improved the on-screen HUD settings for better customizability and display accuracy.
 
 ### Removed
-- **Removed the .cky format.** The macro format is now chosen by the theme (Settings of the mod). Old `.cky` files still load.
+- **Removed the .cky format.** The macro format is now chosen by the theme (Settings of the mod). Old `.cky` files in `game/macros` still load.
 
 ### Fixed
 - **Back step:** it now works right after pausing. While playing, a few light "anchor" snapshots are kept per second (no TPS lag), so Back jumps to the last one; after that, stepping forward makes exact one-frame back steps again.

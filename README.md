@@ -24,7 +24,7 @@ Importing click packs in your clicks folder, will make your click sound whenever
 **UI border changer:**
 Self explanatory for its name lmao
 **Theme = macro format:**
-20 themes, and the active theme is also the extension your macros save with (.sea, .Au, .vamp, ...). Old .cky macros and macros from other themes still load.
+20 themes, and the active theme decides the macro file extension (Cat = .meow, Vintage = .vinyl, Molten rocks = .lava, ...). Macros are saved in the mod's save folder, `macros/<Theme> theme macros/`. Old .cky macros and macros from other themes still load.
 **Hitbox trail:**
 Draws the player's hitboxes left behind every step. Length and colors (outer/inner) are adjustable.
 **HUD:**
