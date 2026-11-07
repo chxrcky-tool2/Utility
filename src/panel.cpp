@@ -93,7 +93,7 @@ namespace {
         for (int c = 0; c < 4; ++c) {
             for (int i = 0; i <= 4; ++i) {
                 float a = (static_cast<float>(c) * 90.f + static_cast<float>(i) * 22.5f) * PI_F / 180.f;
-                out[n++] = { cx[c] + std::cos(a) * r, cy[c] + std::sin(a) * r };
+                out[n++] = CCPoint(cx[c] + std::cos(a) * r, cy[c] + std::sin(a) * r);
             }
         }
         return n;
@@ -103,7 +103,7 @@ namespace {
     void chamferPts(CCPoint* o, float x0, float y0, float x1, float y1, float c) {
         float f[8][2];
         cky::fx::chamfer(x0, y0, x1, y1, c, f);
-        for (int i = 0; i < 8; ++i) o[i] = { f[i][0], f[i][1] };
+        for (int i = 0; i < 8; ++i) o[i] = CCPoint(f[i][0], f[i][1]);
     }
 
     void drawPawCC(CCDrawNode* d, float x, float y, float s, float rot, ccColor4F col) {
