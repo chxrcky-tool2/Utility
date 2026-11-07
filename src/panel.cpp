@@ -47,9 +47,9 @@ namespace {
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
         B_THEME_DN, B_THEME_UP, B_OFF_DN, B_OFF_UP, B_VOL_DN, B_VOL_UP, B_TLEN_DN, B_TLEN_UP,
-        B_HUDGEAR, B_HUDBACK, B_FI_DN, B_FI_UP, B_FVEL,
+        B_HUDGEAR, B_HUDBACK, B_FI_DN, B_FI_UP, B_FVEL, B_HUDOP_DN, B_HUDOP_UP,
         L_TPS = 70, L_TSTEP, L_SPEED, L_HUDSZ, L_ICONSZ, L_SLOT, L_INFO, L_INFO2, L_INFO3,
-        L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN, L_FI,
+        L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN, L_FI, L_HUDOP,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
     };
@@ -134,7 +134,8 @@ namespace {
         d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(0.7f, 1.f, 1.f, 0.35f));
     }
 
-    // Matrix button: flat black box, green border, one red "corrupted" tick in the corner
+    // Matrix button: SOLID black box (c is black, or a very dark green for the selected tab / +/-), green border,
+    // one red "corrupted" tick in the corner
     void drawMatrixBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
         d->clear();
         CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
@@ -144,31 +145,57 @@ namespace {
 
     // buttons that are one CCDrawNode (instead of the stock bordered sprite) in these themes
     bool drawnBtn(Kind k) { return k == Kind::Lava || k == Kind::Cyber || k == Kind::Matrix; }
+    // The +/- buttons and the selected tab use the theme's bright accent colour. In these three themes the label is
+    // light, so a bright fill would swallow it: those buttons get a dark version of the accent instead.
+    bool isAccent(ccColor3B c) {
+        auto const& a = thm().accent;
+        return c.r == a.r && c.g == a.g && c.b == a.b;
+    }
     void drawKindBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
+        bool hot = isAccent(c);
         switch (fxKind()) {
-            case Kind::Cyber:  drawCyberBtn(d, w, h, c); break;
-            case Kind::Matrix: drawMatrixBtn(d, w, h, c); break;
-            default:           drawLavaBtn(d, w, h, c); break;
+            case Kind::Cyber:  drawCyberBtn(d, w, h, hot ? ccc3(0, 62, 96) : c); break;
+            case Kind::Matrix: drawMatrixBtn(d, w, h, hot ? ccc3(0, 46, 14) : ccc3(0, 0, 0)); break;   // solid black
+            default:           drawLavaBtn(d, w, h, hot ? ccc3(150, 52, 12) : c); break;
         }
     }
 
     // text colours per theme (labels / small grey text)
+    // All of these are picked for strong contrast against the (always opaque) card of their theme.
     ccColor3B labelCol() {
         switch (fxKind()) {
-            case Kind::Cat:    return ccc3(214, 98, 124);
+            case Kind::Cat:    return ccc3(150, 40, 78);     // deep rose on the near-white pink card
             case Kind::Matrix: return ccc3(200, 255, 215);
-            case Kind::Cyber:  return ccc3(170, 230, 240);
-            default:           return ccc3(255, 255, 255);
+            case Kind::Cyber:  return ccc3(190, 242, 250);
+            default:           return ccc3(255, 255, 255);   // Molten rocks: pure white
         }
     }
     ccColor3B subCol() {
         switch (fxKind()) {
-            case Kind::Cat:    return ccc3(205, 130, 150);
-            case Kind::Matrix: return ccc3(70, 190, 105);
-            case Kind::Cyber:  return ccc3(110, 150, 175);
+            case Kind::Cat:    return ccc3(170, 84, 112);
+            case Kind::Matrix: return ccc3(70, 200, 105);
+            case Kind::Cyber:  return ccc3(140, 190, 210);
+            case Kind::Lava:   return ccc3(255, 226, 90);    // Molten rocks: bright yellow
             default:           return ccc3(150, 160, 190);
         }
     }
+    ccColor3B titleCol() {
+        switch (fxKind()) {
+            case Kind::Cat:  return ccc3(168, 52, 90);
+            case Kind::Lava: return ccc3(255, 232, 90);
+            default:         return thm().title;
+        }
+    }
+    // text on a button. Cat's buttons are light peach, so their text is dark rose instead of white.
+    ccColor3B btnTextCol() {
+        switch (fxKind()) {
+            case Kind::Cat:    return ccc3(120, 36, 64);
+            case Kind::Matrix: return ccc3(200, 255, 215);
+            case Kind::Cyber:  return ccc3(190, 250, 255);
+            default:           return ccc3(255, 255, 255);
+        }
+    }
+    const ccColor3B kCyberRowOff = ccc3(140, 156, 176);      // Cyber toggle row, switch OFF (was a dark grey)
 
     // ---- toggle boxes (26x22). Cat = cat-face box with ears + paw check. Lava = magma box + orange check.
     //      Cyber = hexagonal switch (knob slides, neon glow ring pulses when ON). Matrix = binary text block. ----
@@ -180,12 +207,12 @@ namespace {
         bool mx = fxKind() == Kind::Matrix;
         float w = mx ? MX_W : TOG_W, h = mx ? MX_H : TOG_H;
         if (mx) {
-            // no checkbox: a dark block that is green when ON and red + "corrupted" when OFF
+            // no checkbox: a solid black block, green binary when ON and red + "corrupted" when OFF
             CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
             if (on) {
-                d->drawPolygon(v, 4, pm(0.f, 0.20f, 0.05f), 1.2f, pm(0.f, 0.95f, 0.30f, 0.9f));
+                d->drawPolygon(v, 4, pm(0.f, 0.f, 0.f), 1.2f, pm(0.f, 0.95f, 0.30f, 0.9f));
             } else {
-                d->drawPolygon(v, 4, pm(0.24f, 0.f, 0.f), 1.2f, pm(1.f, 0.2f, 0.2f, 0.9f));
+                d->drawPolygon(v, 4, pm(0.f, 0.f, 0.f), 1.2f, pm(1.f, 0.2f, 0.2f, 0.9f));
                 for (int i = 0; i < 2; ++i) {                       // random torn strips, drawn once per state change
                     float y = cky::fx::rf(3.f, h - 3.f), x = cky::fx::rf(2.f, w - 14.f);
                     d->drawSegment({ x, y }, { x + cky::fx::rf(6.f, 12.f), y }, 0.5f, pm(1.f, 0.35f, 0.35f, 0.8f));
@@ -411,37 +438,37 @@ namespace {
             for (float x = -w / 2.f + STEP; x < w / 2.f - 1.f; x += STEP, ++ix) {
                 bool major = (ix % 4) == 3;
                 d->drawSegment({ x, -h / 2.f + 1.f }, { x, h / 2.f - 1.f }, major ? 0.55f : 0.3f,
-                               pm(0.f, 0.85f, 1.f, major ? 0.16f : 0.07f));
+                               pm(0.f, 0.85f, 1.f, major ? 0.09f : 0.04f));
             }
             int iy = 0;
             for (float y = -h / 2.f + STEP; y < h / 2.f - 1.f; y += STEP, ++iy) {
                 bool major = (iy % 4) == 3;
                 d->drawSegment({ -w / 2.f + 1.f, y }, { w / 2.f - 1.f, y }, major ? 0.55f : 0.3f,
-                               pm(0.f, 0.85f, 1.f, major ? 0.16f : 0.07f));
+                               pm(0.f, 0.85f, 1.f, major ? 0.09f : 0.04f));
             }
             ix = 0;
             for (float x = -w / 2.f + STEP; x < w / 2.f - 1.f; x += STEP, ++ix) {
                 if ((ix % 4) != 3) continue;
                 iy = 0;
                 for (float y = -h / 2.f + STEP; y < h / 2.f - 1.f; y += STEP, ++iy)
-                    if ((iy % 4) == 3) d->drawDot({ x, y }, 1.5f, pm(0.f, 0.9f, 1.f, 0.22f));   // glowing intersections
+                    if ((iy % 4) == 3) d->drawDot({ x, y }, 1.5f, pm(0.f, 0.9f, 1.f, 0.14f));   // glowing intersections
             }
             return d;
         }
 
-        // Cyber: the scanning laser. Drawn ONCE (a bright core + soft bands, none overlapping) and then just moved
-        // up and down by a repeating action: no redraw, no update(). It sits above the widgets, so whatever it
-        // passes over is lit by it. w = card width, h = window height. The bands stay inside the card.
+        // Cyber: the scanning laser. Drawn ONCE (a core + soft bands, none overlapping) and then just moved up and
+        // down by a repeating action: no redraw, no update(). It sits BEHIND the widgets and the text (z = 1), so it
+        // can never make a label hard to read. w = card width, h = window height. The bands stay inside the card.
         static CCDrawNode* makeLaser(float w, float h) {
             auto d = CCDrawNode::create();
             float half = w / 2.f - 3.f;
             for (int i = 0; i < 4; ++i) {
                 float off = 2.f + static_cast<float>(i) * 2.5f;
-                float a = 0.16f * (1.f - static_cast<float>(i) / 4.f);
+                float a = 0.10f * (1.f - static_cast<float>(i) / 4.f);
                 d->drawSegment({ -half, off },  { half, off },  1.25f, pm(0.f, 1.f, 1.f, a));
                 d->drawSegment({ -half, -off }, { half, -off }, 1.25f, pm(0.f, 1.f, 1.f, a));
             }
-            d->drawSegment({ -half, 0.f }, { half, 0.f }, 0.9f, pm(0.5f, 1.f, 1.f, 0.95f));
+            d->drawSegment({ -half, 0.f }, { half, 0.f }, 0.9f, pm(0.5f, 1.f, 1.f, 0.70f));
             float travel = h / 2.f - 20.f;
             d->setPosition({ 0.f, -travel });
             d->runAction(CCRepeatForever::create(CCSequence::create(
@@ -549,8 +576,7 @@ public:
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
         lbl->setScale(ls);
         lbl->setPosition({w / 2.f, h / 2.f});
-        if (kind == Kind::Matrix) lbl->setColor(ccc3(200, 255, 215));
-        else if (kind == Kind::Cyber) lbl->setColor(ccc3(190, 250, 255));
+        if (kind != Kind::None) lbl->setColor(btnTextCol());
         lbl->setTag(2);
         node->addChild(lbl, 2);
 
@@ -717,10 +743,10 @@ public:
         if (!l) return;
         l->stopAllActions();
         if (on && boot) {
-            l->setColor(ccc3(6, 34, 42));
+            l->setColor(ccc3(90, 130, 146));
             l->runAction(CCTintTo::create(0.5f, 0, 240, 255));
         } else {
-            l->setColor(on ? ccc3(0, 240, 255) : ccc3(78, 88, 104));
+            l->setColor(on ? ccc3(0, 240, 255) : kCyberRowOff);
         }
     }
 
@@ -802,7 +828,7 @@ public:
         auto lbl = rowLabel(text);
         if (fxKind() == Kind::Cyber) {                    // toggle rows: dark grey until switched ON
             lbl->setTag(LBL_TAGS + tag);
-            lbl->setColor(ccc3(78, 88, 104));
+            lbl->setColor(kCyberRowOff);
         }
         if (fxKind() != Kind::None) makeToggle(m_menu, tag, 190.f, m_y);
         else makeBtn(m_menu, menu_selector(CkyPanel::onPill), tag, 176.f, m_y, 58.f, 20.f, "OFF", kOff);
@@ -906,7 +932,7 @@ public:
         {
             CCPoint v[8];
             chamferPts(v, -W / 2.f + 1.f, -H / 2.f + 1.f, W / 2.f - 1.f, H / 2.f - 1.f, cc);
-            d->drawPolygon(v, 8, pm3(card, 0.97f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
+            d->drawPolygon(v, 8, pm3(card, 1.f), 0.f, pm(0.f, 0.f, 0.f, 0.f));   // fully opaque
         }
         {
             CCPoint v[8];
@@ -970,7 +996,7 @@ public:
             auto card = CCScale9Sprite::create("square02_001.png");
             card->setContentSize({W - 12.f, H - 12.f});
             card->setColor(kCard);
-            card->setOpacity(245);
+            card->setOpacity(255);   // menus are always fully opaque
             this->addChild(card, 1);
 
             auto side = CCScale9Sprite::create("square02_001.png");
@@ -990,18 +1016,18 @@ public:
             this->scheduleUpdate();                                                 // label glitch ticker
         } else if (kind == Kind::Cyber) {
             this->addChild(CkyFx::makeGrid(W - 12.f, H - 12.f), 1);                 // glowing grid (above the card, under the sidebar)
-            this->addChild(CkyFx::makeLaser(W - 12.f, H), 6);                       // scanning laser, on top of the widgets
+            this->addChild(CkyFx::makeLaser(W - 12.f, H), 1);                       // scanning laser, BEHIND the widgets and text
         }
 
         auto title = CCLabelBMFont::create("ChxrCky", "bigFont.fnt");
         title->setScale(0.55f);
-        title->setColor(thm().title);
+        title->setColor(titleCol());
         title->setPosition({-149.f, 108.f});
         this->addChild(title, 3);
 
         auto sub = CCLabelBMFont::create("Macro Bot", "bigFont.fnt");
         sub->setScale(0.3f);
-        sub->setColor(fxKind() == Kind::Cat ? ccc3(210, 140, 160) : subCol());
+        sub->setColor(subCol());
         sub->setPosition({-149.f, 92.f});
         this->addChild(sub, 3);
 
@@ -1054,7 +1080,7 @@ public:
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
-        head->setColor(thm().title);
+        head->setColor(titleCol());
         head->setPosition({-72.f, 112.f});
         m_content->addChild(head);
 
@@ -1105,6 +1131,7 @@ public:
                 makeGear(m_menu, B_HUDGEAR, 122.f, hy);
             }
             rowValue("HUD size", B_HUDSZ_DN, B_HUDSZ_UP, L_HUDSZ);
+            rowValue("HUD opacity", B_HUDOP_DN, B_HUDOP_UP, L_HUDOP);
             rowPill("StartPos switcher", T_STARTPOS);
             rowPill("Input overlay", T_OVERLAY);
             rowPill("Show trajectory", T_TRAJ);
@@ -1230,6 +1257,7 @@ public:
         setText(L_TSTEP, fmt::format("{}", static_cast<int>(cky::tpsStep)));
         setText(L_SPEED, fmt::format("{:.2f}x", cky::speed));
         setText(L_HUDSZ, fmt::format("{:.1f}x", cky::hudScale));
+        setText(L_HUDOP, fmt::format("{}%", static_cast<int>(std::lround(cky::hudOpacity * 100.f))));
         setText(L_ICONSZ, fmt::format("{:.1f}x", cky::iconScale));
         setText(L_SLOT, fmt::format("{}", cky::slot));
         setText(L_VOL, fmt::format("{}%", cky::clickVol));
@@ -1485,6 +1513,12 @@ public:
         case B_HUDSZ_UP:
             cky::hudScale = cky::nextVal(cky::sizeList, cky::hudScale, t == B_HUDSZ_UP ? 1 : -1);
             ckyApplyHudScale();
+            break;
+        case B_HUDOP_DN:
+        case B_HUDOP_UP:
+            // in-level HUD only; the menus stay opaque. ckyHudRefresh() (end of this handler) redraws the HUD.
+            cky::hudOpacity = std::clamp(std::round((cky::hudOpacity + (t == B_HUDOP_UP ? 0.05f : -0.05f)) * 100.f) / 100.f, 0.1f, 1.f);
+            cky::hudOpacitySave();
             break;
         case B_ICONSZ_DN:
         case B_ICONSZ_UP:

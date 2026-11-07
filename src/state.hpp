@@ -203,6 +203,9 @@ namespace cky {
 
     inline float    hudScale = 1.f;
     inline float    iconScale = 1.f;
+    // In-level HUD panel opacity (0.1 - 1.0). ONLY the in-level HUD uses it: the Cocos panel and the ImGui menu
+    // are always fully opaque (1.0) in every theme.
+    inline float    hudOpacity = 0.75f;
 
     inline bool     audioSpeed = true;
     inline bool     lastFrozenAudio = false;
@@ -223,6 +226,13 @@ namespace cky {
     inline std::vector<float> const sizeList = { 0.6f, 0.8f, 1.f, 1.2f, 1.5f };
     inline std::vector<float> const tpsStepList = { 1.f, 5.f, 10.f, 50.f, 100.f, 500.f };
     inline std::vector<float> const highTpsList = { 480.f, 960.f, 1920.f, 3000.f, 5000.f };
+
+    inline void hudOpacitySave() {
+        Mod::get()->setSavedValue<float>("hud-opacity", hudOpacity);
+    }
+    inline void hudOpacityLoad() {
+        hudOpacity = std::clamp(Mod::get()->getSavedValue<float>("hud-opacity", hudOpacity), 0.1f, 1.f);
+    }
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
     inline float effSpeed() { return (speedOn && speedBtns) ? speed : 1.f; }
