@@ -29,17 +29,41 @@ inline const uint8_t CKY_LOGO[] = {
     59,26,59,25,60,26,61,27,62,28,62,27,63,28,63,27
 };
 
-// Round button: neon ring + dark face + glowing Cky logo
-inline CCNode* ckyMakeLogo(float d) {
+// Round button: neon ring + dark face + glowing Cky logo.
+// The disc is built from 64-sided polygons (a true circle whatever the dot shader does) and the ring / face
+// pieces do NOT overlap, so `alpha` can be applied to every colour (premultiplied, as CCDrawNode wants)
+// and the idle 0.5 version still looks like the full one, just see-through.
+inline CCNode* ckyMakeLogo(float d, float alpha = 1.f) {
     auto container = CCNode::create();
     container->setContentSize({d, d});
     container->setAnchorPoint({0.5f, 0.5f});
 
     float R = d / 2.f;
     auto dn = CCDrawNode::create();
-    dn->drawDot({R, R}, R, ccc4f(0.35f, 0.85f, 1.f, 1.f));
-    dn->drawDot({R, R}, R - 1.4f, ccc4f(0.04f, 0.05f, 0.17f, 1.f));
-    dn->drawDot({R, R}, R - 3.4f, ccc4f(0.06f, 0.08f, 0.25f, 1.f));
+    auto pm = [&](float r, float g, float b, float a = 1.f) {
+        a *= alpha;
+        return ccc4f(r * a, g * a, b * a, a);
+    };
+    constexpr int SEG = 64;
+    constexpr float TAU = 6.28318530718f;
+    auto pt = [&](float rad, int i) {
+        float a = TAU * static_cast<float>(i) / SEG;
+        return CCPoint(R + std::cos(a) * rad, R + std::sin(a) * rad);
+    };
+    auto disc = [&](float rad, ccColor4F c) {
+        CCPoint v[SEG];
+        for (int i = 0; i < SEG; ++i) v[i] = pt(rad, i);
+        dn->drawPolygon(v, SEG, c, 0.f, c);
+    };
+    auto band = [&](float r0, float r1, ccColor4F c) {   // ring between two radii, as 64 touching quads
+        for (int i = 0; i < SEG; ++i) {
+            CCPoint q[4] = { pt(r1, i), pt(r1, i + 1), pt(r0, i + 1), pt(r0, i) };
+            dn->drawPolygon(q, 4, c, 0.f, c);
+        }
+    };
+    band(R - 1.4f, R,       pm(0.35f, 0.85f, 1.f));        // neon ring
+    band(R - 3.4f, R - 1.4f, pm(0.04f, 0.05f, 0.17f));      // dark inner rim
+    disc(R - 3.4f,           pm(0.06f, 0.08f, 0.25f));      // face
 
     float cell = (d * 0.72f) / 64.f;
     float ox = R - 32.f * cell;
@@ -49,9 +73,9 @@ inline CCNode* ckyMakeLogo(float d) {
 
     struct Layer { float r; ccColor4F c; };
     Layer layers[3] = {
-        { 1.7f,  ccc4f(0.15f * 0.12f, 0.75f * 0.12f, 1.f * 0.12f, 0.12f) },
-        { 1.1f,  ccc4f(0.25f * 0.30f, 0.82f * 0.30f, 1.f * 0.30f, 0.30f) },
-        { 0.62f, ccc4f(0.85f, 1.f, 1.f, 1.f) }
+        { 1.7f,  pm(0.15f, 0.75f, 1.f, 0.12f) },
+        { 1.1f,  pm(0.25f, 0.82f, 1.f, 0.30f) },
+        { 0.62f, pm(0.85f, 1.f, 1.f, 1.f) }
     };
     for (auto const& l : layers) {
         for (size_t i = 0; i < n; ++i) {
