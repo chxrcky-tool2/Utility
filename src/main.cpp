@@ -3,6 +3,8 @@
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 
 // true  = this file applies the speedhack (inside GJBaseGameLayer::update)
 // false = set this if physics.cpp already applies speed, so it isn't applied twice
@@ -10,6 +12,17 @@ static constexpr bool SPEED_IN_MAIN = true;
 
 namespace {
     float g_diagTimer = 0.f;
+
+    // practice fixes: full player state saved with every practice-mode checkpoint
+    struct CpState { CkyPlayerState p1, p2; };
+    std::unordered_map<CheckpointObject*, CpState> g_cpStates;
+
+    // game time in steps (m_levelTime * TPS), only used to compare with our own counter in the log
+    template <class S>
+    double ckyLevelFrame(S const& st) {
+        if constexpr (requires { st.m_levelTime; }) return static_cast<double>(st.m_levelTime) * cky::effTps();
+        else return -1.0;
+    }
 
     // m_gameState.m_currentProgress is the game's own step counter; only used for the log.
     template <class S>
@@ -125,7 +138,8 @@ namespace {
         ++cky::verifyMisses;
         if (cky::firstDivFrame < 0) {
             cky::firstDivFrame = f.frame;
-            log::warn("[cky] first desync at frame {}: dx={:.5f} dy={:.5f} dyVel={:.5f}", f.frame, dx, dy, dv);
+            log::warn("[cky] first desync at frame {}: dx={:.5f} dy={:.5f} dyVel={:.5f} (our step {}, game time frame {:.1f})",
+                f.frame, dx, dy, dv, cky::step, ckyLevelFrame(l->m_gameState));
             ckyOverlayShow(fmt::format("Desync @ frame {} (dy {:.3f}, dvy {:.3f})", f.frame, dy, dv), false);
         }
         return true;
@@ -311,8 +325,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                     s_calls, cky::step, ckyProgress(m_gameState), isHalfTick, isLastTick, dt);
             }
             if (!isHalfTick && cky::step > 0 && (cky::step % 2400) == 0) {
-                log::info("[cky] sync check: step={} progress={} halfTicksSeen={}",
-                    cky::step, ckyProgress(m_gameState), s_half);
+                log::info("[cky] sync check: step={} progress={} levelTimeFrame={:.1f} halfTicksSeen={}",
+                    cky::step, ckyProgress(m_gameState), ckyLevelFrame(m_gameState), s_half);
             }
         }
 
@@ -441,8 +455,37 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
 };
 
 class $modify(CkyPlayLayer, PlayLayer) {
+    // practice fixes: remember the full player state next to every practice checkpoint
+    CheckpointObject* createCheckpoint() {
+        auto cp = PlayLayer::createCheckpoint();
+        if (!cp || cky::anchoring || !cky::practiceFixes) return cp;
+        if (g_cpStates.size() > 512) { // drop states of checkpoints that no longer exist
+            std::unordered_set<CheckpointObject*> live;
+            if (m_checkpointArray) {
+                for (auto c : CCArrayExt<CheckpointObject*>(m_checkpointArray)) live.insert(c);
+            }
+            for (auto it = g_cpStates.begin(); it != g_cpStates.end();) {
+                it = live.contains(it->first) ? std::next(it) : g_cpStates.erase(it);
+            }
+        }
+        g_cpStates[cp] = { cky::capturePlayer(m_player1), cky::capturePlayer(m_player2) };
+        return cp;
+    }
+
+    // ...and put it back after the game loaded the checkpoint (only while recording / playing)
+    void loadFromCheckpoint(CheckpointObject* cp) {
+        PlayLayer::loadFromCheckpoint(cp);
+        if (!cp || !cky::practiceFixes) return;
+        if (!((cky::recording && cky::recArmed) || (cky::playing && cky::playArmed))) return;
+        auto it = g_cpStates.find(cp);
+        if (it == g_cpStates.end()) return;
+        cky::restorePlayer(m_player1, it->second.p1);
+        if (m_gameState.m_isDualMode) cky::restorePlayer(m_player2, it->second.p2);
+    }
+
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
+        g_cpStates.clear();
         cky::step = 0;
         cky::frameClock = 0.0;
         cky::cursor = 0;

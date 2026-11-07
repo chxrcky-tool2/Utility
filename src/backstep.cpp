@@ -18,6 +18,7 @@ namespace {
         uint32_t step;
         double clock;
         std::vector<int> held; // buttons held when the snapshot was taken (before that step's inputs)
+        CkyPlayerState p1, p2; // full player state (the checkpoint alone does not restore all of it)
     };
     std::deque<Snap> g_ring;
     uint32_t g_target = 0;            // step a pending back step is heading to
@@ -87,7 +88,9 @@ void ckyBackStepCapture() {
     if (!g_ring.empty() && g_ring.back().step == cky::step) return;
 
     size_t cpCount = pl->m_checkpointArray ? pl->m_checkpointArray->count() : 0;
+    cky::anchoring = true;
     CheckpointObject* cp = pl->createCheckpoint();
+    cky::anchoring = false;
     if (!cp) return;
     cp->retain();
 
@@ -98,6 +101,10 @@ void ckyBackStepCapture() {
     }
 
     Snap s{ cp, cky::step, cky::frameClock, {} };
+    if (cky::practiceFixes) {
+        s.p1 = cky::capturePlayer(pl->m_player1);
+        s.p2 = cky::capturePlayer(pl->m_player2);
+    }
     for (int i = 0; i < 0x200; ++i) if (cky::held[i]) s.held.push_back(i);
     g_ring.push_back(std::move(s));
 
@@ -134,6 +141,9 @@ bool ckyBackStep() {
 
     Snap& s = g_ring.back();
     pl->loadFromCheckpoint(s.cp);
+    // re-apply everything the checkpoint does not restore (xdBot-style practice fixes)
+    if (s.p1.valid) cky::restorePlayer(pl->m_player1, s.p1);
+    if (s.p2.valid && pl->m_gameState.m_isDualMode) cky::restorePlayer(pl->m_player2, s.p2);
     pl->m_extraDelta = 0.f; // no leftover time from the step we came from
 
     cky::step = s.step;

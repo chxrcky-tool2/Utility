@@ -12,6 +12,8 @@
 
 using namespace geode::prelude;
 
+#include "player_state.hpp"
+
 // per-step player snapshot used by "Frame fixes" (position + rotation of both players)
 struct FrameFix {
     uint32_t frame;
@@ -132,6 +134,9 @@ namespace cky {
     inline bool     hitboxes = false;
     // hitbox trail: RGBA (0-1) of the outer and inner hitbox, length in physics steps
     inline bool     hitboxTrail = false;
+    // practice fixes (xdBot idea): re-apply the full player state after a checkpoint / anchor load
+    inline bool     practiceFixes = true;
+    inline bool     anchoring = false;   // true while the back stepper takes its own snapshot
     inline int      trailLen = 120;
     inline float    trailOuter[4] = { 1.f, 0.25f, 0.25f, 1.f };
     inline float    trailInner[4] = { 0.30f, 0.55f, 1.f, 1.f };
