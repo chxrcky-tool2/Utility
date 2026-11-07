@@ -1,57 +1,30 @@
-// panel.cpp — menu: themes, 6 tabs, black-outlined pills, +/- values, scrolling rows
+// panel.cpp — menu: themes (see themes.hpp), 6 tabs, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace {
+    // Cocos-side view of a theme (built once from cky::kThemeDefs in themes.hpp)
     struct Theme {
         ccColor3B card, side, tab, off, on, accent, btn, title;
         ccColor4B top, bottom;
         char const* name;
     };
 
-    Theme const kThemes[] = {
-        { ccc3(22,24,40), ccc3(14,15,28), ccc3(30,34,60), ccc3(62,66,90), ccc3(60,200,120),
-          ccc3(60,130,255), ccc3(45,52,88), ccc3(120,210,255),
-          ccc4(255,120,190,255), ccc4(225,25,50,255), "Neon" },
-        { ccc3(9,34,50), ccc3(5,24,38), ccc3(15,58,80), ccc3(46,76,94), ccc3(64,226,190),
-          ccc3(0,170,220), ccc3(18,82,108), ccc3(150,244,242),
-          ccc4(72,226,210,255), ccc4(6,66,130,255), "Ocean" },
-        { ccc3(18,32,24), ccc3(12,24,18), ccc3(28,50,36), ccc3(58,76,64), ccc3(110,210,90),
-          ccc3(60,170,110), ccc3(34,62,44), ccc3(170,240,150),
-          ccc4(120,220,120,255), ccc4(20,110,70,255), "Forest" },
-        { ccc3(38,22,30), ccc3(28,14,22), ccc3(60,34,44), ccc3(88,62,70), ccc3(255,170,60),
-          ccc3(255,100,90), ccc3(74,40,52), ccc3(255,200,140),
-          ccc4(255,190,70,255), ccc4(220,50,90,255), "Sunset" },
-        { ccc3(24,24,26), ccc3(16,16,18), ccc3(40,40,44), ccc3(70,70,76), ccc3(200,200,206),
-          ccc3(130,130,140), ccc3(52,52,58), ccc3(230,230,235),
-          ccc4(200,200,206,255), ccc4(70,70,76,255), "Mono" },
-        // Cat: black cat, amber eyes, pink nose
-        { ccc3(28,26,32), ccc3(18,17,22), ccc3(48,44,56), ccc3(84,78,92), ccc3(255,196,50),
-          ccc3(255,140,170), ccc3(58,52,66), ccc3(255,214,120),
-          ccc4(255,196,70,255), ccc4(70,56,84,255), "Cat" },
-        // Vintage: sepia / old paper
-        { ccc3(46,38,30), ccc3(34,28,22), ccc3(70,58,44), ccc3(104,92,76), ccc3(154,184,104),
-          ccc3(200,154,84), ccc3(84,68,48), ccc3(236,218,174),
-          ccc4(218,188,134,255), ccc4(122,80,50,255), "Vintage" },
-        // Sky
-        { ccc3(24,56,94), ccc3(16,42,74), ccc3(36,82,128), ccc3(84,114,146), ccc3(120,226,255),
-          ccc3(96,184,255), ccc3(42,94,148), ccc3(206,240,255),
-          ccc4(156,218,255,255), ccc4(72,152,232,255), "Sky" },
-        // Lavender purple
-        { ccc3(46,36,78), ccc3(34,26,62), ccc3(68,54,108), ccc3(104,94,134), ccc3(204,174,255),
-          ccc3(174,134,255), ccc3(80,64,124), ccc3(228,210,255),
-          ccc4(218,194,255,255), ccc4(132,92,222,255), "Lavender" },
-        // Rose (light pink)
-        { ccc3(78,42,60), ccc3(62,32,48), ccc3(108,60,84), ccc3(140,104,120), ccc3(255,176,206),
-          ccc3(255,134,174), ccc3(124,64,94), ccc3(255,228,238),
-          ccc4(255,210,228,255), ccc4(240,142,182,255), "Rose" },
-    };
-
-    static_assert(sizeof(kThemes) / sizeof(kThemes[0]) == cky::ThemeCount, "theme tables out of sync");
+    ccColor3B c3(unsigned char const (&v)[3]) { return ccc3(v[0], v[1], v[2]); }
+    ccColor4B c4(unsigned char const (&v)[3]) { return ccc4(v[0], v[1], v[2], 255); }
 
     Theme const& thm() {
-        int n = static_cast<int>(sizeof(kThemes) / sizeof(kThemes[0]));
-        return kThemes[std::clamp(cky::theme, 0, n - 1)];
+        static std::vector<Theme> const themes = [] {
+            std::vector<Theme> out;
+            out.reserve(cky::ThemeCount);
+            for (auto const& d : cky::kThemeDefs) {
+                out.push_back({ c3(d.card), c3(d.side), c3(d.tab), c3(d.off), c3(d.on),
+                                c3(d.accent), c3(d.btn), c3(d.title),
+                                c4(d.top), c4(d.bottom), d.name });
+            }
+            return out;
+        }();
+        return themes[std::clamp(cky::theme, 0, cky::ThemeCount - 1)];
     }
 
     int g_startTab = 0;
@@ -867,7 +840,7 @@ public:
             break;
         case B_THEME_DN:
         case B_THEME_UP: {
-            int n = static_cast<int>(sizeof(kThemes) / sizeof(kThemes[0]));
+            int n = cky::ThemeCount;
             cky::theme = ((cky::theme + (t == B_THEME_UP ? 1 : -1)) % n + n) % n;
             Mod::get()->setSavedValue<int>("theme", cky::theme);
             g_startTab = m_tab;

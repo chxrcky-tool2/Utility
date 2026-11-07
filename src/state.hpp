@@ -13,6 +13,7 @@
 using namespace geode::prelude;
 
 #include "player_state.hpp"
+#include "themes.hpp"
 
 // per-step player snapshot used by "Frame fixes" (position + rotation of both players)
 struct FrameFix {
@@ -149,7 +150,7 @@ namespace cky {
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
     inline int      theme = 0;
-    constexpr int   ThemeCount = 10;   // Neon, Ocean, Forest, Sunset, Mono, Cat, Vintage, Sky, Lavender, Rose
+    // ThemeCount + every theme's colours live in themes.hpp
     inline int      clickVol = 100;   // clickbot volume, percent (0-200)
     inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
     inline bool     imguiOpen = false;
@@ -376,14 +377,38 @@ namespace cky {
         return Mod::get()->getSaveDir();
     }
 
-    // e.g. Stereo_Madness_1_slot1.cky
+    // Macros are saved with the current theme's name as the file extension
+    // (Stereo_Madness_1_slot1.sea, ...slot1.Au, ...). Inside it is the same CKY format whatever
+    // the extension is. Old ".cky" files and files saved under any other theme still load.
+    inline std::filesystem::path slotPathExt(std::string const& ext) {
+        return macroDir() / fmt::format("{}_{}_slot{}{}", levelNameSafe(), levelId(), slot, ext);
+    }
+
+    // where a new macro is written: the current theme's extension
     inline std::filesystem::path slotPath() {
-        return macroDir() / fmt::format("{}_{}_slot{}.cky", levelNameSafe(), levelId(), slot);
+        return slotPathExt(kThemeDefs[std::clamp(theme, 0, ThemeCount - 1)].name);
+    }
+
+    // the macro to read: the most recently saved file among the current theme's extension,
+    // every other theme's extension and the legacy ".cky". Empty path if there is none.
+    inline std::filesystem::path slotFind() {
+        std::filesystem::path best;
+        std::filesystem::file_time_type bestTime{};
+        auto consider = [&](std::filesystem::path p) {
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(p, ec) || ec) return;
+            auto t = std::filesystem::last_write_time(p, ec);
+            if (ec) return;
+            if (best.empty() || t > bestTime) { best = std::move(p); bestTime = t; }
+        };
+        consider(slotPath());            // first, so the current theme wins a tie
+        consider(slotPathExt(".cky"));
+        for (auto const& d : kThemeDefs) consider(slotPathExt(d.name));
+        return best;
     }
 
     inline bool slotExists() {
-        std::error_code ec;
-        return std::filesystem::exists(slotPath(), ec);
+        return !slotFind().empty();
     }
 
     inline bool save() {
@@ -408,9 +433,9 @@ namespace cky {
     }
 
     inline bool load() {
-        auto p = slotPath();
+        auto p = slotFind();
         std::error_code ec;
-        if (!std::filesystem::exists(p, ec)) {
+        if (p.empty()) {
             auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
             if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
         }
