@@ -400,6 +400,9 @@ namespace cky {
             if (ec) ok = false;
         }
         done = ok;
+        // shows up in game/geode/logs so you can see where the folders went (or why they weren't made)
+        if (ok) log::info("[cky] macro folders ready: {}", (themeMacroDir(0).parent_path()).string());
+        else    log::error("[cky] could not create macro folders under {}: {}", (themeMacroDir(0).parent_path()).string(), ec.message());
     }
 
     // the file this level + slot has under theme t
