@@ -135,6 +135,11 @@ namespace {
             if (cky::recording) ckyNotify("Stop recording first", false);
             else cky::frameFixes = ff;
         }
+        bool pf = cky::practiceFixes;
+        if (ImGui::Checkbox("Practice fixes", &pf)) {
+            if (cky::recording) ckyNotify("Stop recording first", false);
+            else cky::practiceFixes = pf;
+        }
         {
             int fi = cky::fixInterval;
             if (ImGui::SliderInt("Fix interval (steps)", &fi, 1, 240)) {

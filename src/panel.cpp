@@ -68,7 +68,7 @@ namespace {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
-        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS, T_TRAIL,
+        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS, T_TRAIL, T_PFIX,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
@@ -437,6 +437,7 @@ public:
             rowPill("Playback", T_PLAY);
             rowPill("Frame stepper", T_STEPPER);
             rowPill("Frame fixes", T_FFIX);
+            rowPill("Practice fixes", T_PFIX);
             rowValue("Fix interval", B_FI_DN, B_FI_UP, L_FI);
             rowWide("Toggle fix velocity", B_FVEL);
             rowValue("Macro slot", B_SLOT_DN, B_SLOT_UP, L_SLOT);
@@ -561,6 +562,7 @@ public:
         setPill(T_CLICKBOT, cky::clickbotOn);
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
+        setPill(T_PFIX, cky::practiceFixes);
         setPill(T_HUDSTEP, cky::hudStepShow);
         setPill(T_HUDSPEED, cky::hudSpeedShow);
         setPill(T_BACKSTEP, cky::backStepOn);
@@ -711,6 +713,10 @@ public:
         case T_FFIX:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::frameFixes = !cky::frameFixes;
+            break;
+        case T_PFIX:
+            if (cky::recording) { ckyNotify("Stop recording first", false); break; }
+            cky::practiceFixes = !cky::practiceFixes;
             break;
         case T_HUDSTEP:
             cky::hudStepShow = !cky::hudStepShow;
