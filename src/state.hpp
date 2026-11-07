@@ -378,19 +378,28 @@ namespace cky {
         return Mod::get()->getSaveDir();
     }
 
-    // Saved macros live in <mod save dir>/macros/ (Android: com.geode.launcher/.../save/geode/mods/chxrcky.cky/macros),
-    // one folder per theme ("Cat theme macros", "Vintage theme macros", ...). A theme's folder holds files
-    // with that theme's extension: <level>_<id>_slot<N>.meow, ...slot1.vinyl, ...slot1.lava, ...
-    // Inside it is the same CKY format whatever the extension. Old ".cky" macros still load.
+    // Saved macros live in the mod's CONFIG folder (Android: com.geode.launcher/.../game/geode/config/chxrcky.cky):
+    //   chxrcky.cky / Theme macros / <Theme name> / <level>_<id>_slot<N><ext>
+    // e.g. Theme macros/Cat/Stereo_Madness_1_slot1.meow, Theme macros/Vintage/...slot1.vinyl,
+    // Theme macros/Molten rocks/...slot1.lava. Inside is the same CKY format whatever the extension.
+    // Old ".cky" macros in <game>/macros still load.
     inline std::filesystem::path themeMacroDir(int t) {
         auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
-        return Mod::get()->getSaveDir() / "macros" / fmt::format("{} theme macros", d.name);
+        return Mod::get()->getConfigDir() / "Theme macros" / d.name;
     }
 
-    // creates macros/ and one folder per theme (called when the mod loads, so they are there to browse)
+    // creates "Theme macros" and one folder per theme (when the mod loads and when the menu opens,
+    // so they are there to browse). Cheap: does nothing after the first successful run.
     inline void makeMacroFolders() {
+        static bool done = false;
+        if (done) return;
         std::error_code ec;
-        for (int i = 0; i < ThemeCount; ++i) std::filesystem::create_directories(themeMacroDir(i), ec);
+        bool ok = true;
+        for (int i = 0; i < ThemeCount; ++i) {
+            std::filesystem::create_directories(themeMacroDir(i), ec);
+            if (ec) ok = false;
+        }
+        done = ok;
     }
 
     // the file this level + slot has under theme t

@@ -571,6 +571,7 @@ public:
             cky::slotExists() ? "saved" : "empty"));
         setText(L_OFF, fmt::format("{:+d}", cky::frameOffset));
         setText(L_FI, fmt::format("{}", cky::fixInterval));
+        cky::makeMacroFolders();
         setText(L_THEME, thm().name);
         // long names (e.g. "Molten rocks") shrink so they still fit between the +/- buttons
         if (m_rows) {
