@@ -3,6 +3,7 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 
 ## [1.0.5]
 ### Added
+- **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step. (untested)
 - **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
 - **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset, plus Cat, Vintage, Sky, Lavender and Rose. Ocean got a richer aqua-to-deep-blue palette.
 - **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.

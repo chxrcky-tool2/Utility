@@ -19,6 +19,8 @@ Makes the player stops at a specific frame, and can step frame by frame
 Importing click packs in your clicks folder, will make your click sound whenever you press.
 **UI border changer:**
 Self explanatory for its name lmao
+**Hitbox trail:**
+Draws the player's hitboxes left behind every step. Length and colors (outer/inner) are adjustable.
 **HUD:**
 Shows the buttons for speed changer, & you can adjust the speed in game.
 
