@@ -70,6 +70,9 @@ namespace {
         PAGE_LABELS = 8
     };
 
+    // row label of a toggle row = LBL_TAGS + the toggle's tag (Cyber tints it cyan / grey)
+    enum : int { LBL_TAGS = 1000 };
+
     constexpr float ROW = 28.f;
     constexpr float VIEW_TOP = 90.f;
     constexpr float VIEW_BOTTOM = -112.f;
@@ -120,13 +123,84 @@ namespace {
         d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(1.f, 0.78f, 0.4f, 0.35f));
     }
 
-    // ---- toggle boxes (26x22). Cat = cat-face box with ears + paw check. Lava = magma box + orange check ----
+    // Cyber button: sharp chamfered corners, glowing cyan outline (soft halo first, crisp line on top)
+    void drawCyberBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
+        d->clear();
+        float k = std::min(h * 0.3f, 6.f);
+        CCPoint v[8];
+        chamferPts(v, 0.f, 0.f, w, h, k);
+        d->drawPolygon(v, 8, pm(0.f, 0.f, 0.f, 0.f), 3.6f, pm(0.f, 0.9f, 1.f, 0.20f));
+        d->drawPolygon(v, 8, pm3(c), 1.3f, pm(0.25f, 0.95f, 1.f, 1.f));
+        d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(0.7f, 1.f, 1.f, 0.35f));
+    }
+
+    // Matrix button: flat black box, green border, one red "corrupted" tick in the corner
+    void drawMatrixBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
+        d->clear();
+        CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
+        d->drawPolygon(v, 4, pm3(c), 1.4f, pm(0.f, 1.f, 0.35f, 0.95f));
+        d->drawSegment({ w - 10.f, h - 1.f }, { w - 3.f, h - 1.f }, 0.5f, pm(1.f, 0.2f, 0.2f, 0.9f));
+    }
+
+    // buttons that are one CCDrawNode (instead of the stock bordered sprite) in these themes
+    bool drawnBtn(Kind k) { return k == Kind::Lava || k == Kind::Cyber || k == Kind::Matrix; }
+    void drawKindBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
+        switch (fxKind()) {
+            case Kind::Cyber:  drawCyberBtn(d, w, h, c); break;
+            case Kind::Matrix: drawMatrixBtn(d, w, h, c); break;
+            default:           drawLavaBtn(d, w, h, c); break;
+        }
+    }
+
+    // text colours per theme (labels / small grey text)
+    ccColor3B labelCol() {
+        switch (fxKind()) {
+            case Kind::Cat:    return ccc3(214, 98, 124);
+            case Kind::Matrix: return ccc3(200, 255, 215);
+            case Kind::Cyber:  return ccc3(170, 230, 240);
+            default:           return ccc3(255, 255, 255);
+        }
+    }
+    ccColor3B subCol() {
+        switch (fxKind()) {
+            case Kind::Cat:    return ccc3(205, 130, 150);
+            case Kind::Matrix: return ccc3(70, 190, 105);
+            case Kind::Cyber:  return ccc3(110, 150, 175);
+            default:           return ccc3(150, 160, 190);
+        }
+    }
+
+    // ---- toggle boxes (26x22). Cat = cat-face box with ears + paw check. Lava = magma box + orange check.
+    //      Cyber = hexagonal switch (knob slides, neon glow ring pulses when ON). Matrix = binary text block. ----
     constexpr float TOG_W = 26.f, TOG_H = 22.f;
+    constexpr float MX_W = 46.f, MX_H = 20.f;      // Matrix toggle (fits "0 X 0")
 
     void drawToggleBox(CCDrawNode* d, bool on) {
         d->clear();
-        float w = TOG_W, h = TOG_H;
-        if (fxKind() == Kind::Lava) {
+        bool mx = fxKind() == Kind::Matrix;
+        float w = mx ? MX_W : TOG_W, h = mx ? MX_H : TOG_H;
+        if (mx) {
+            // no checkbox: a dark block that is green when ON and red + "corrupted" when OFF
+            CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
+            if (on) {
+                d->drawPolygon(v, 4, pm(0.f, 0.20f, 0.05f), 1.2f, pm(0.f, 0.95f, 0.30f, 0.9f));
+            } else {
+                d->drawPolygon(v, 4, pm(0.24f, 0.f, 0.f), 1.2f, pm(1.f, 0.2f, 0.2f, 0.9f));
+                for (int i = 0; i < 2; ++i) {                       // random torn strips, drawn once per state change
+                    float y = cky::fx::rf(3.f, h - 3.f), x = cky::fx::rf(2.f, w - 14.f);
+                    d->drawSegment({ x, y }, { x + cky::fx::rf(6.f, 12.f), y }, 0.5f, pm(1.f, 0.35f, 0.35f, 0.8f));
+                }
+            }
+        } else if (fxKind() == Kind::Cyber) {
+            float c = 6.f;
+            CCPoint v[6] = { { c, 0.f }, { w - c, 0.f }, { w, h / 2.f }, { w - c, h }, { c, h }, { 0.f, h / 2.f } };
+            d->drawPolygon(v, 6, on ? pm(0.01f, 0.14f, 0.20f) : pm(0.07f, 0.08f, 0.10f), 1.6f,
+                           on ? pm(0.f, 0.95f, 1.f) : pm(0.22f, 0.24f, 0.28f));
+            float kx = on ? w - 9.f : 9.f, cy = h / 2.f;               // knob: left = OFF, right = ON
+            CCPoint k[6] = { { kx - 3.f, cy - 4.f }, { kx + 3.f, cy - 4.f }, { kx + 5.f, cy },
+                             { kx + 3.f, cy + 4.f }, { kx - 3.f, cy + 4.f }, { kx - 5.f, cy } };
+            d->drawPolygon(k, 6, on ? pm(0.65f, 1.f, 1.f) : pm(0.25f, 0.27f, 0.31f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
+        } else if (fxKind() == Kind::Lava) {
             CCPoint v[8];
             chamferPts(v, 0.f, 0.f, w, h, 5.f);
             d->drawPolygon(v, 8, pm(0.11f, 0.03f, 0.02f), 1.8f, on ? pm(1.f, 0.42f, 0.08f) : pm(0.55f, 0.20f, 0.10f));
@@ -163,7 +237,12 @@ namespace {
     void drawToggleCheck(CCDrawNode* d) {
         d->clear();
         float w = TOG_W, h = TOG_H;
-        if (fxKind() == Kind::Lava) {
+        if (fxKind() == Kind::Cyber) {
+            // neon halo + inner glow of the ON switch. The holder node breathes (scale action), nothing is redrawn.
+            float c = 6.f, hw = w / 2.f + 1.5f, hh = h / 2.f + 1.5f;
+            CCPoint v[6] = { { -hw + c, -hh }, { hw - c, -hh }, { hw, 0.f }, { hw - c, hh }, { -hw + c, hh }, { -hw, 0.f } };
+            d->drawPolygon(v, 6, pm(0.f, 0.9f, 1.f, 0.12f), 3.4f, pm(0.f, 0.95f, 1.f, 0.38f));
+        } else if (fxKind() == Kind::Lava) {
             CCPoint a(w * -.26f, h * .02f), b(w * -.07f, h * -.22f), c(w * .30f, h * .26f);
             d->drawSegment(a, b, 1.7f, pm(1.f, 0.50f, 0.06f));          // orange check
             d->drawSegment(b, c, 1.7f, pm(1.f, 0.50f, 0.06f));
@@ -174,18 +253,68 @@ namespace {
         }
     }
 
-    // ---- floating particles inside the menu: rising embers (Lava) / click paws (Cat) ----
+    // ---- Matrix toggle click: the text scrolls random characters, then locks in left to right (~0.5 s) ----
+    // A tiny node that lives NEXT TO the label (CCLabelBMFont is a sprite batch node: it only takes sprites as
+    // children). It is only scheduled while a scramble runs, so an idle toggle costs nothing.
+    class CkyScramble : public CCNode {
+        CCLabelBMFont* m_lbl = nullptr;     // sibling, same parent: they are always freed together
+        char m_text[16] = {};
+        ccColor3B m_col = { 255, 255, 255 };
+        float m_t = 0.f, m_acc = 0.f;
+        uint32_t m_salt = 0;
+    public:
+        static constexpr int TAG = 777;
+        static void start(CCNode* holder, CCLabelBMFont* lbl, char const* text, ccColor3B col) {
+            if (!holder || !lbl) return;
+            auto s = static_cast<CkyScramble*>(holder->getChildByTag(TAG));   // only this class ever uses TAG
+            if (!s) {
+                s = new CkyScramble();
+                if (!s->init()) { CC_SAFE_DELETE(s); lbl->setString(text); lbl->setColor(col); return; }
+                s->autorelease();
+                s->setTag(TAG);
+                holder->addChild(s);
+            }
+            s->m_lbl = lbl;
+            std::snprintf(s->m_text, sizeof(s->m_text), "%s", text);
+            s->m_col = col;
+            s->m_t = 0.f;
+            s->m_acc = 1.f;                                    // draw the first frame right away
+            s->m_salt = cky::fx::rnd();
+            lbl->setColor(ccc3(200, 255, 215));                // scrolling characters show pale, the final colour locks in
+            s->scheduleUpdate();
+        }
+        static void cancel(CCNode* holder) {
+            if (!holder) return;
+            if (auto s = static_cast<CkyScramble*>(holder->getChildByTag(TAG))) s->unscheduleUpdate();
+        }
+        void update(float dt) override {
+            if (!m_lbl) { this->unscheduleUpdate(); return; }
+            m_t += dt;
+            m_acc += dt;
+            if (m_acc < 1.f / 30.f) return;                    // 30 steps a second is a readable scroll
+            m_acc = 0.f;
+            char buf[16];
+            uint32_t epoch = static_cast<uint32_t>(m_t * 30.f) + m_salt;
+            bool done = cky::fx::scramble(m_text, m_t, epoch, buf, sizeof(buf));
+            m_lbl->setString(buf);
+            if (done) { m_lbl->setColor(m_col); this->unscheduleUpdate(); }
+        }
+    };
+
+    // ---- floating particles inside the menu: rising embers (Lava) / click paws (Cat) / digital rain (Matrix) ----
     // One CCDrawNode, cleared and redrawn at 30 Hz. Particles are killed the moment they would cross the box,
     // and paws are pushed inside it when spawned, so nothing is ever drawn outside the menu.
     class CkyFx : public CCLayer {
     public:
-        enum class Mode { Embers, Paws };
+        enum class Mode { Embers, Paws, Rain };
     private:
         Mode m_mode = Mode::Embers;
         cky::fx::Rect m_box{};
         CCDrawNode* m_dn = nullptr;
         cky::fx::EmberPool m_embers;
         cky::fx::PawPool m_paws;
+        cky::fx::RainSim m_rain;
+        static constexpr float RAIN_CELL = 9.f;               // Cocos px per rain cell
         float m_acc = 0.f;
         bool  m_drawn = false;
 
@@ -225,10 +354,33 @@ namespace {
 
         void update(float dt) override {
             m_acc += dt;
-            if (m_acc < 1.f / 30.f) return;                 // 30 Hz is plenty and keeps Android cool
+            // 30 Hz is plenty and keeps Android cool; the rain is faint, so 20 Hz
+            if (m_acc < (m_mode == Mode::Rain ? 1.f / 20.f : 1.f / 30.f)) return;
             float step = std::min(m_acc, 0.1f);
             m_acc = 0.f;
-            if (m_mode == Mode::Embers) {
+            if (m_mode == Mode::Rain) {
+                // Faint green rain at 0.2 opacity: columns of tiny "1" bars and "0" boxes. One draw node, cleared and
+                // redrawn at 20 Hz (24 columns x 7 cells, ~170 shapes). A cell is skipped unless it is fully inside the card.
+                m_rain.step(step, RAIN_CELL, m_box);
+                m_dn->clear();
+                float hh = RAIN_CELL * 0.38f, ww = RAIN_CELL * 0.22f;
+                for (int i = 0; i < m_rain.n; ++i) {
+                    float x = m_rain.colX(i, m_box);
+                    if (x - ww < m_box.x0 || x + ww > m_box.x1) continue;
+                    for (int k = 0; k < cky::fx::RainSim::TRAIL; ++k) {
+                        float y = m_rain.c[i].head + static_cast<float>(k) * RAIN_CELL;
+                        if (y - hh < m_box.y0 || y + hh > m_box.y1) continue;
+                        float a = cky::fx::RainSim::cellAlpha(k) * cky::fx::kRainAlpha;
+                        ccColor4F col = k == 0 ? pm(0.75f, 1.f, 0.8f, a) : pm(0.f, 1.f, 0.35f, a);
+                        if (m_rain.bit(i, k)) {
+                            m_dn->drawSegment({ x, y - hh }, { x, y + hh }, 0.7f, col);              // "1"
+                        } else {
+                            CCPoint q[4] = { { x - ww, y - hh }, { x + ww, y - hh }, { x + ww, y + hh }, { x - ww, y + hh } };
+                            m_dn->drawPolygon(q, 4, pm(0.f, 0.f, 0.f, 0.f), 0.7f, col);               // "0"
+                        }
+                    }
+                }
+            } else if (m_mode == Mode::Embers) {
                 m_embers.step(step, 1.f, m_box);
                 m_dn->clear();
                 for (auto const& q : m_embers.p) {
@@ -249,6 +401,53 @@ namespace {
                 m_drawn = m_paws.alive() > 0;
                 if (!m_drawn) m_dn->clear();
             }
+        }
+
+        // Cyber: faint glowing grid. Drawn ONCE (34 lines + a few glow dots), zero per-frame cost.
+        static CCDrawNode* makeGrid(float w, float h) {
+            auto d = CCDrawNode::create();
+            constexpr float STEP = 20.f;
+            int ix = 0;
+            for (float x = -w / 2.f + STEP; x < w / 2.f - 1.f; x += STEP, ++ix) {
+                bool major = (ix % 4) == 3;
+                d->drawSegment({ x, -h / 2.f + 1.f }, { x, h / 2.f - 1.f }, major ? 0.55f : 0.3f,
+                               pm(0.f, 0.85f, 1.f, major ? 0.16f : 0.07f));
+            }
+            int iy = 0;
+            for (float y = -h / 2.f + STEP; y < h / 2.f - 1.f; y += STEP, ++iy) {
+                bool major = (iy % 4) == 3;
+                d->drawSegment({ -w / 2.f + 1.f, y }, { w / 2.f - 1.f, y }, major ? 0.55f : 0.3f,
+                               pm(0.f, 0.85f, 1.f, major ? 0.16f : 0.07f));
+            }
+            ix = 0;
+            for (float x = -w / 2.f + STEP; x < w / 2.f - 1.f; x += STEP, ++ix) {
+                if ((ix % 4) != 3) continue;
+                iy = 0;
+                for (float y = -h / 2.f + STEP; y < h / 2.f - 1.f; y += STEP, ++iy)
+                    if ((iy % 4) == 3) d->drawDot({ x, y }, 1.5f, pm(0.f, 0.9f, 1.f, 0.22f));   // glowing intersections
+            }
+            return d;
+        }
+
+        // Cyber: the scanning laser. Drawn ONCE (a bright core + soft bands, none overlapping) and then just moved
+        // up and down by a repeating action: no redraw, no update(). It sits above the widgets, so whatever it
+        // passes over is lit by it. w = card width, h = window height. The bands stay inside the card.
+        static CCDrawNode* makeLaser(float w, float h) {
+            auto d = CCDrawNode::create();
+            float half = w / 2.f - 3.f;
+            for (int i = 0; i < 4; ++i) {
+                float off = 2.f + static_cast<float>(i) * 2.5f;
+                float a = 0.16f * (1.f - static_cast<float>(i) / 4.f);
+                d->drawSegment({ -half, off },  { half, off },  1.25f, pm(0.f, 1.f, 1.f, a));
+                d->drawSegment({ -half, -off }, { half, -off }, 1.25f, pm(0.f, 1.f, 1.f, a));
+            }
+            d->drawSegment({ -half, 0.f }, { half, 0.f }, 0.9f, pm(0.5f, 1.f, 1.f, 0.95f));
+            float travel = h / 2.f - 20.f;
+            d->setPosition({ 0.f, -travel });
+            d->runAction(CCRepeatForever::create(CCSequence::create(
+                CCEaseSineInOut::create(CCMoveTo::create(3.8f, ccp(0.f, travel))),
+                CCEaseSineInOut::create(CCMoveTo::create(3.8f, ccp(0.f, -travel))), nullptr)));
+            return d;
         }
 
         // Cat: static scattered paws, 0.4 opacity, different sizes. Drawn ONCE, zero per-frame cost.
@@ -280,6 +479,11 @@ class CkyPanel : public CCNode {
     int     m_tab = 0;
     bool    m_anim = false;         // true only while a toggle was just tapped: the check pops in
     std::vector<CCNode*> m_hidden;
+    // Matrix: one label at a time gets a character swapped to a red / white symbol for a split second
+    CCLabelBMFont* m_glLbl = nullptr;
+    std::string    m_glOrig, m_glShown;
+    int            m_glIdx = -1;
+    float          m_glLeft = 0.f, m_glAcc = 0.f;
 
 public:
     static CkyPanel* create() {
@@ -315,11 +519,12 @@ public:
         node->setAnchorPoint({0.5f, 0.5f});
 
         Kind kind = fxKind();
-        if (kind == Kind::Lava) {
-            // sharp chamfered ("hexagonal") corners with a hot rim, all in one draw node
+        if (drawnBtn(kind)) {
+            // Lava: chamfered corners + hot rim. Cyber: chamfered + glowing cyan outline. Matrix: flat black + green
+            // border. All in one draw node (tag 1), repainted by paint()
             auto bg = CCDrawNode::create();
             bg->setTag(1);
-            drawLavaBtn(bg, w, h, color);
+            drawKindBtn(bg, w, h, color);
             node->addChild(bg, 0);
         } else {
             auto border = CCScale9Sprite::create("square02_001.png");
@@ -344,6 +549,8 @@ public:
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
         lbl->setScale(ls);
         lbl->setPosition({w / 2.f, h / 2.f});
+        if (kind == Kind::Matrix) lbl->setColor(ccc3(200, 255, 215));
+        else if (kind == Kind::Cyber) lbl->setColor(ccc3(190, 250, 255));
         lbl->setTag(2);
         node->addChild(lbl, 2);
 
@@ -359,8 +566,10 @@ public:
 
     // Cat / Lava toggle box (replaces the ON/OFF pill): a box that gets a check when ON
     CCMenuItemSpriteExtra* makeToggle(CCMenu* menu, int tag, float x, float y) {
+        bool mx = fxKind() == Kind::Matrix;
+        float tw = mx ? MX_W : TOG_W, th = mx ? MX_H : TOG_H;
         auto node = CCNode::create();
-        node->setContentSize({TOG_W, TOG_H});
+        node->setContentSize({tw, th});
         node->setAnchorPoint({0.5f, 0.5f});
 
         auto bg = CCDrawNode::create();
@@ -369,12 +578,22 @@ public:
         node->addChild(bg, 0);
 
         auto holder = CCNode::create();                    // scales about its centre
-        holder->setTag(3);
-        holder->setPosition({TOG_W / 2.f, TOG_H / 2.f});
+        holder->setTag(3);                                 // (its visibility is also "is this toggle ON")
+        holder->setPosition({tw / 2.f, th / 2.f});
         holder->setVisible(false);
-        auto chk = CCDrawNode::create();
-        drawToggleCheck(chk);
-        holder->addChild(chk);
+        if (mx) {
+            // Matrix: no check. The block shows binary text: "1 0 1" green = ON, "0 X 0" red = OFF
+            auto bin = CCLabelBMFont::create(cky::fx::kBinOff, "bigFont.fnt");
+            bin->setScale(0.34f);
+            bin->setColor(ccc3(255, 50, 50));
+            bin->setPosition({tw / 2.f, th / 2.f});
+            bin->setTag(5);
+            node->addChild(bin, 1);
+        } else {
+            auto chk = CCDrawNode::create();
+            drawToggleCheck(chk);
+            holder->addChild(chk);
+        }
         node->addChild(holder, 1);
 
         auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(CkyPanel::onPill));
@@ -385,15 +604,30 @@ public:
         return item;
     }
 
-    static void paintToggle(CCMenuItemSpriteExtra* it, bool on, bool animate) {
+    // returns true when the toggle actually changed state (so callers can react only to a real change)
+    static bool paintToggle(CCMenuItemSpriteExtra* it, bool on, bool animate) {
         auto n = it ? it->getNormalImage() : nullptr;
-        if (!n) return;
+        if (!n) return false;
         auto bg = typeinfo_cast<CCDrawNode*>(n->getChildByTag(1));
         auto chk = n->getChildByTag(3);
-        if (!bg || !chk || chk->isVisible() == on) return;  // nothing changed -> nothing to redraw
+        if (!bg || !chk || chk->isVisible() == on) return false;  // nothing changed -> nothing to redraw
         drawToggleBox(bg, on);
         chk->stopAllActions();
         chk->setVisible(on);
+        if (fxKind() == Kind::Matrix) {
+            auto lbl = typeinfo_cast<CCLabelBMFont*>(n->getChildByTag(5));
+            if (!lbl) return true;
+            char const* txt = on ? cky::fx::kBinOn : cky::fx::kBinOff;
+            ccColor3B col = on ? ccc3(0, 255, 80) : ccc3(255, 50, 50);
+            if (animate) {
+                CkyScramble::start(n, lbl, txt, col);       // glitch through random characters, then lock in
+            } else {
+                CkyScramble::cancel(n);
+                lbl->setString(txt);
+                lbl->setColor(col);
+            }
+            return true;
+        }
         if (on) {
             if (animate) {
                 chk->setScale(0.2f);
@@ -401,7 +635,15 @@ public:
             } else {
                 chk->setScale(1.f);
             }
+            if (fxKind() == Kind::Cyber) {                 // neon ring breathes while ON: one scale action, no redraw
+                float t = 0.55f + 0.2f * static_cast<float>(cky::fx::rnd() & 3u) / 3.f;   // desync the switches a little
+                chk->runAction(CCRepeatForever::create(CCSequence::create(
+                    CCDelayTime::create(animate ? 0.25f : 0.f),
+                    CCEaseSineInOut::create(CCScaleTo::create(t, 1.10f)),
+                    CCEaseSineInOut::create(CCScaleTo::create(t, 0.96f)), nullptr)));
+            }
         }
+        return true;
     }
 
     // small bordered button with a drawn gear on it
@@ -438,9 +680,9 @@ public:
         if (auto n = it->getNormalImage()) {
             auto b = n->getChildByTag(1);
             if (auto bg = typeinfo_cast<CCScale9Sprite*>(b)) bg->setColor(c);
-            else if (auto d = typeinfo_cast<CCDrawNode*>(b)) {   // Lava buttons are draw nodes
+            else if (auto d = typeinfo_cast<CCDrawNode*>(b)) {   // Lava / Cyber / Matrix buttons are draw nodes
                 auto sz = n->getContentSize();
-                drawLavaBtn(d, sz.width, sz.height, c);
+                drawKindBtn(d, sz.width, sz.height, c);
             }
         }
     }
@@ -459,9 +701,78 @@ public:
     void setPill(int tag, bool on) {
         auto it = findBtn(tag);
         if (!it) return;
-        if (fxKind() != Kind::None) { paintToggle(it, on, m_anim); return; }
+        if (fxKind() != Kind::None) {
+            bool changed = paintToggle(it, on, m_anim);
+            if (changed && fxKind() == Kind::Cyber) tintRowLabel(tag, on, m_anim);
+            return;
+        }
         retext(it, on ? "ON" : "OFF");
         paint(it, on ? kOn : kOff);
+    }
+
+    // Cyber: the row's text is bright neon cyan when ON and dark grey when OFF. A real tap "boots it up":
+    // it fades from dark to bright. One tint action per tap, nothing per frame.
+    void tintRowLabel(int tag, bool on, bool boot) {
+        auto l = typeinfo_cast<CCLabelBMFont*>(m_rows ? m_rows->getChildByTag(LBL_TAGS + tag) : nullptr);
+        if (!l) return;
+        l->stopAllActions();
+        if (on && boot) {
+            l->setColor(ccc3(6, 34, 42));
+            l->runAction(CCTintTo::create(0.5f, 0, 240, 255));
+        } else {
+            l->setColor(on ? ccc3(0, 240, 255) : ccc3(78, 88, 104));
+        }
+    }
+
+    // ---- Matrix: label glitch (one label at a time, ~0.1 s, about twice a second) ----
+    void glitchRestore() {
+        if (m_glLbl) {
+            if (m_glShown == m_glLbl->getString()) m_glLbl->setString(m_glOrig.c_str());   // nobody changed it meanwhile
+            if (auto ch = typeinfo_cast<CCSprite*>(m_glLbl->getChildByTag(m_glIdx))) ch->setColor(ccc3(255, 255, 255));
+        }
+        m_glLbl = nullptr;
+        m_glLeft = 0.f;
+    }
+
+    void glitchStart() {
+        if (!m_rows) return;
+        auto kids = m_rows->getChildren();
+        if (!kids) return;
+        CCLabelBMFont* cand[48];
+        int n = 0;
+        for (auto c : CCArrayExt<CCNode*>(kids)) {
+            auto l = typeinfo_cast<CCLabelBMFont*>(c);
+            if (l && l->isVisible() && n < 48) cand[n++] = l;
+        }
+        if (n == 0) return;
+        auto l = cand[cky::fx::rnd() % static_cast<uint32_t>(n)];
+        std::string s = l->getString();
+        if (s.empty()) return;
+        size_t i = cky::fx::rnd() % s.size();
+        if (s[i] == ' ') return;
+        m_glLbl = l;
+        m_glOrig = s;
+        m_glIdx = static_cast<int>(i);
+        s[i] = cky::fx::kScrambleSet[cky::fx::rnd() % (sizeof(cky::fx::kScrambleSet) - 1)];
+        m_glShown = s;
+        l->setString(s.c_str());
+        if (auto ch = typeinfo_cast<CCSprite*>(l->getChildByTag(m_glIdx)))
+            ch->setColor((cky::fx::rnd() & 1u) ? ccc3(255, 60, 60) : ccc3(255, 255, 255));
+        m_glLeft = cky::fx::rf(0.07f, 0.16f);
+    }
+
+    void update(float dt) override {
+        if (fxKind() != Kind::Matrix) return;
+        if (m_glLbl) {
+            m_glLeft -= dt;
+            if (m_glLeft <= 0.f) glitchRestore();
+            return;
+        }
+        m_glAcc += dt;
+        if (m_glAcc >= 0.35f) {
+            m_glAcc = 0.f;
+            if (cky::fx::rnd() % 100 < 70) glitchStart();
+        }
     }
 
     void setText(int tag, std::string const& s) {
@@ -477,17 +788,22 @@ public:
         m_y -= h;
     }
 
-    void rowLabel(char const* text) {
+    CCLabelBMFont* rowLabel(char const* text) {
         auto l = CCLabelBMFont::create(text, "bigFont.fnt");
         l->setScale(0.4f);
         l->setAnchorPoint({0.f, 0.5f});
         l->setPosition({-72.f, m_y});
-        if (fxKind() == Kind::Cat) l->setColor(ccc3(214, 98, 124));
+        l->setColor(labelCol());
         m_rows->addChild(l);
+        return l;
     }
 
     void rowPill(char const* text, int tag) {
-        rowLabel(text);
+        auto lbl = rowLabel(text);
+        if (fxKind() == Kind::Cyber) {                    // toggle rows: dark grey until switched ON
+            lbl->setTag(LBL_TAGS + tag);
+            lbl->setColor(ccc3(78, 88, 104));
+        }
         if (fxKind() != Kind::None) makeToggle(m_menu, tag, 190.f, m_y);
         else makeBtn(m_menu, menu_selector(CkyPanel::onPill), tag, 176.f, m_y, 58.f, 20.f, "OFF", kOff);
         nextRow();
@@ -499,7 +815,7 @@ public:
         auto v = CCLabelBMFont::create("", "bigFont.fnt");
         v->setScale(0.4f);
         v->setPosition({152.f, m_y});
-        if (fxKind() == Kind::Cat) v->setColor(ccc3(214, 98, 124));
+        v->setColor(labelCol());
         v->setTag(lbl);
         m_rows->addChild(v);
         makeBtn(m_menu, menu_selector(CkyPanel::onBtn), up, 184.f, m_y, 24.f, 20.f, "+", kAccent, 0.45f);
@@ -521,7 +837,7 @@ public:
         auto l = CCLabelBMFont::create("", "bigFont.fnt");
         l->setScale(0.35f);
         l->setAnchorPoint({0.f, 0.5f});
-        l->setColor(fxKind() == Kind::Cat ? ccc3(205, 130, 150) : ccc3(150, 160, 190));
+        l->setColor(subCol());
         l->setPosition({-72.f, m_y});
         l->setTag(tag);
         m_rows->addChild(l);
@@ -551,7 +867,7 @@ public:
         auto l = CCLabelBMFont::create(text, "bigFont.fnt");
         l->setScale(0.3f);
         l->setAnchorPoint({0.f, 0.5f});
-        l->setColor(fxKind() == Kind::Cat ? ccc3(205, 130, 150) : ccc3(150, 160, 190));
+        l->setColor(subCol());
         l->setPosition({-72.f, m_y});
         m_rows->addChild(l);
         nextRow(18.f);
@@ -669,6 +985,12 @@ public:
             this->addChild(CkyFx::create(CkyFx::Mode::Paws, box), 6);               // click paws, on top
         } else if (kind == Kind::Lava) {
             this->addChild(CkyFx::create(CkyFx::Mode::Embers, box), 2);             // rising embers, behind the widgets
+        } else if (kind == Kind::Matrix) {
+            this->addChild(CkyFx::create(CkyFx::Mode::Rain, box), 2);               // faint digital rain, behind the widgets
+            this->scheduleUpdate();                                                 // label glitch ticker
+        } else if (kind == Kind::Cyber) {
+            this->addChild(CkyFx::makeGrid(W - 12.f, H - 12.f), 1);                 // glowing grid (above the card, under the sidebar)
+            this->addChild(CkyFx::makeLaser(W - 12.f, H), 6);                       // scanning laser, on top of the widgets
         }
 
         auto title = CCLabelBMFont::create("ChxrCky", "bigFont.fnt");
@@ -679,7 +1001,7 @@ public:
 
         auto sub = CCLabelBMFont::create("Macro Bot", "bigFont.fnt");
         sub->setScale(0.3f);
-        sub->setColor(fxKind() == Kind::Cat ? ccc3(210, 140, 160) : ccc3(150, 160, 190));
+        sub->setColor(fxKind() == Kind::Cat ? ccc3(210, 140, 160) : subCol());
         sub->setPosition({-149.f, 92.f});
         this->addChild(sub, 3);
 
@@ -709,6 +1031,7 @@ public:
 
     void buildTab(int tab) {
         m_tab = tab;
+        m_glLbl = nullptr;                        // its row is about to be freed
         if (m_content) m_content->removeFromParent();
         m_content = CCNode::create();
         this->addChild(m_content, 5);
