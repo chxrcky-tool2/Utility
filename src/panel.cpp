@@ -1,5 +1,6 @@
 // panel.cpp — menu: themes (see themes.hpp), 6 tabs, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
+#include "fx.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace {
@@ -72,6 +73,197 @@ namespace {
     constexpr float ROW = 28.f;
     constexpr float VIEW_TOP = 90.f;
     constexpr float VIEW_BOTTOM = -112.f;
+
+    // ================= theme effects (Cat / Molten rocks) — maths lives in fx.hpp =================
+    using cky::fx::Kind;
+    Kind fxKind() { return cky::fx::kindOf(cky::theme); }
+
+    // CCDrawNode blends premultiplied, so every translucent colour goes through these
+    ccColor4F pm(float r, float g, float b, float a = 1.f) { return ccc4f(r * a, g * a, b * a, a); }
+    ccColor4F pm3(ccColor3B c, float a = 1.f) { return pm(c.r / 255.f, c.g / 255.f, c.b / 255.f, a); }
+    ccColor4F pmc(cky::fx::Col c, float a = 1.f) { return pm(c.r, c.g, c.b, a); }
+
+    constexpr float PI_F = 3.14159265f;
+
+    // rounded rectangle, 4 segments per corner -> 20 points
+    int roundRect(CCPoint* out, float x0, float y0, float x1, float y1, float r) {
+        int n = 0;
+        float cx[4] = { x1 - r, x0 + r, x0 + r, x1 - r };
+        float cy[4] = { y1 - r, y1 - r, y0 + r, y0 + r };
+        for (int c = 0; c < 4; ++c) {
+            for (int i = 0; i <= 4; ++i) {
+                float a = (static_cast<float>(c) * 90.f + static_cast<float>(i) * 22.5f) * PI_F / 180.f;
+                out[n++] = { cx[c] + std::cos(a) * r, cy[c] + std::sin(a) * r };
+            }
+        }
+        return n;
+    }
+
+    // chamfered ("hexagonal") corners: 8 points
+    void chamferPts(CCPoint* o, float x0, float y0, float x1, float y1, float c) {
+        float f[8][2];
+        cky::fx::chamfer(x0, y0, x1, y1, c, f);
+        for (int i = 0; i < 8; ++i) o[i] = { f[i][0], f[i][1] };
+    }
+
+    void drawPawCC(CCDrawNode* d, float x, float y, float s, float rot, ccColor4F col) {
+        cky::fx::pawDots(x, y, s, rot, [&](float px, float py, float r) { d->drawDot({ px, py }, r, col); });
+    }
+
+    // Molten rocks button: sharp chamfered corners, hot orange rim, lit top edge
+    void drawLavaBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
+        d->clear();
+        float k = std::min(h * 0.3f, 6.f);
+        CCPoint v[8];
+        chamferPts(v, 0.f, 0.f, w, h, k);
+        d->drawPolygon(v, 8, pm3(c), 1.5f, pm(1.f, 0.55f, 0.16f, 0.95f));
+        d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(1.f, 0.78f, 0.4f, 0.35f));
+    }
+
+    // ---- toggle boxes (26x22). Cat = cat-face box with ears + paw check. Lava = magma box + orange check ----
+    constexpr float TOG_W = 26.f, TOG_H = 22.f;
+
+    void drawToggleBox(CCDrawNode* d, bool on) {
+        d->clear();
+        float w = TOG_W, h = TOG_H;
+        if (fxKind() == Kind::Lava) {
+            CCPoint v[8];
+            chamferPts(v, 0.f, 0.f, w, h, 5.f);
+            d->drawPolygon(v, 8, pm(0.11f, 0.03f, 0.02f), 1.8f, on ? pm(1.f, 0.42f, 0.08f) : pm(0.55f, 0.20f, 0.10f));
+            CCPoint in[8];
+            chamferPts(in, 3.f, 3.f, w - 3.f, h - 3.f, 3.5f);          // magma core
+            d->drawPolygon(in, 8, on ? pm(0.62f, 0.13f, 0.03f) : pm(0.25f, 0.07f, 0.04f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
+            ccColor4F glow = pm(1.f, 0.60f, 0.15f, on ? 0.95f : 0.35f); // glowing cracks
+            d->drawSegment({ w * .18f, h * .28f }, { w * .42f, h * .42f }, 0.5f, glow);
+            d->drawSegment({ w * .42f, h * .42f }, { w * .50f, h * .22f }, 0.5f, glow);
+            d->drawSegment({ w * .62f, h * .80f }, { w * .84f, h * .60f }, 0.5f, glow);
+            d->drawSegment({ w * .70f, h * .24f }, { w * .86f, h * .34f }, 0.5f, glow);
+            d->drawSegment({ 6.f, 2.5f }, { w - 6.f, 2.5f }, 0.6f, pm(1.f, 0.5f, 0.1f, on ? 0.8f : 0.25f));
+        } else {
+            ccColor4F ear = pm(1.f, 0.69f, 0.63f), earIn = pm(1.f, 0.86f, 0.88f);
+            CCPoint l[3] = { { 3.f, h - 2.f }, { 4.f, h + 8.f }, { 12.f, h - 2.f } };
+            CCPoint r[3] = { { w - 12.f, h - 2.f }, { w - 4.f, h + 8.f }, { w - 3.f, h - 2.f } };
+            d->drawPolygon(l, 3, ear, 0.f, ear);
+            d->drawPolygon(r, 3, ear, 0.f, ear);
+            CCPoint li[3] = { { 5.f, h - 1.f }, { 5.5f, h + 4.5f }, { 9.5f, h - 1.f } };
+            CCPoint ri[3] = { { w - 9.5f, h - 1.f }, { w - 5.5f, h + 4.5f }, { w - 5.f, h - 1.f } };
+            d->drawPolygon(li, 3, earIn, 0.f, earIn);
+            d->drawPolygon(ri, 3, earIn, 0.f, earIn);
+            CCPoint v[20];
+            int n = roundRect(v, 0.f, 0.f, w, h, 7.f);
+            d->drawPolygon(v, n, on ? pm(1.f, 0.84f, 0.78f) : pm(1.f, 0.94f, 0.95f), 2.f, pm(1.f, 0.69f, 0.63f));
+            if (on) {                                                    // blush when ON
+                d->drawDot({ 4.5f, 4.5f }, 2.2f, pm(1.f, 0.62f, 0.68f, 0.6f));
+                d->drawDot({ w - 4.5f, 4.5f }, 2.2f, pm(1.f, 0.62f, 0.68f, 0.6f));
+            }
+        }
+    }
+
+    // the check, drawn around (0,0) so it can pop-scale about its centre
+    void drawToggleCheck(CCDrawNode* d) {
+        d->clear();
+        float w = TOG_W, h = TOG_H;
+        if (fxKind() == Kind::Lava) {
+            CCPoint a(w * -.26f, h * .02f), b(w * -.07f, h * -.22f), c(w * .30f, h * .26f);
+            d->drawSegment(a, b, 1.7f, pm(1.f, 0.50f, 0.06f));          // orange check
+            d->drawSegment(b, c, 1.7f, pm(1.f, 0.50f, 0.06f));
+            d->drawSegment(a, b, 0.6f, pm(1.f, 0.82f, 0.35f, 0.9f));    // hot core
+            d->drawSegment(b, c, 0.6f, pm(1.f, 0.82f, 0.35f, 0.9f));
+        } else {
+            drawPawCC(d, 0.f, -0.5f, 7.5f, 0.f, pm(1.f, 0.52f, 0.58f));
+        }
+    }
+
+    // ---- floating particles inside the menu: rising embers (Lava) / click paws (Cat) ----
+    // One CCDrawNode, cleared and redrawn at 30 Hz. Particles are killed the moment they would cross the box,
+    // and paws are pushed inside it when spawned, so nothing is ever drawn outside the menu.
+    class CkyFx : public CCLayer {
+    public:
+        enum class Mode { Embers, Paws };
+    private:
+        Mode m_mode = Mode::Embers;
+        cky::fx::Rect m_box{};
+        CCDrawNode* m_dn = nullptr;
+        cky::fx::EmberPool m_embers;
+        cky::fx::PawPool m_paws;
+        float m_acc = 0.f;
+        bool  m_drawn = false;
+
+    public:
+        static CkyFx* create(Mode m, cky::fx::Rect box) {
+            auto r = new CkyFx();
+            r->m_mode = m;
+            r->m_box = box;
+            if (r->init()) { r->autorelease(); return r; }
+            CC_SAFE_DELETE(r);
+            return nullptr;
+        }
+
+        bool init() override {
+            if (!CCLayer::init()) return false;
+            m_dn = CCDrawNode::create();
+            this->addChild(m_dn);
+            this->scheduleUpdate();
+            if (m_mode == Mode::Paws) this->setTouchEnabled(true);
+            return true;
+        }
+
+        // never swallows: the buttons underneath still get the touch
+        void registerWithTouchDispatcher() override {
+            CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -700, false);
+        }
+
+        bool ccTouchBegan(CCTouch* t, CCEvent*) override {
+            if (m_mode != Mode::Paws || !this->getParent()) return false;
+            CCPoint p = this->getParent()->convertToNodeSpace(t->getLocation());
+            if (p.x >= m_box.x0 && p.x <= m_box.x1 && p.y >= m_box.y0 && p.y <= m_box.y1) {
+                m_paws.spawn(p.x, p.y, 1.f, m_box);
+                m_drawn = true;
+            }
+            return false;
+        }
+
+        void update(float dt) override {
+            m_acc += dt;
+            if (m_acc < 1.f / 30.f) return;                 // 30 Hz is plenty and keeps Android cool
+            float step = std::min(m_acc, 0.1f);
+            m_acc = 0.f;
+            if (m_mode == Mode::Embers) {
+                m_embers.step(step, 1.f, m_box);
+                m_dn->clear();
+                for (auto const& q : m_embers.p) {
+                    if (!q.alive) continue;
+                    float a = cky::fx::EmberPool::alphaOf(q);
+                    auto c = cky::fx::emberColor(q.age / q.life);
+                    if (q.size > 1.6f) m_dn->drawDot({ q.x, q.y }, q.size * 2.2f, pmc(c, a * 0.22f)); // soft glow
+                    m_dn->drawDot({ q.x, q.y }, q.size, pmc(c, a));
+                }
+            } else {
+                if (!m_drawn) return;
+                m_paws.step(step, 1.f, m_box);
+                m_dn->clear();
+                for (auto const& q : m_paws.p) {
+                    if (!q.alive) continue;
+                    drawPawCC(m_dn, q.x, q.y, q.size, q.rot, pmc(cky::fx::kPeachDeep, cky::fx::PawPool::alphaOf(q)));
+                }
+                m_drawn = m_paws.alive() > 0;
+                if (!m_drawn) m_dn->clear();
+            }
+        }
+
+        // Cat: static scattered paws, 0.4 opacity, different sizes. Drawn ONCE, zero per-frame cost.
+        static CCDrawNode* makeBgPaws(float w, float h) {
+            auto d = CCDrawNode::create();
+            ccColor4F col = pmc(cky::fx::kPeach, cky::fx::kBgPawAlpha);
+            for (auto const& b : cky::fx::kBgPaws) {
+                float e = cky::fx::pawExtent(b.size) + 2.f;
+                float x = std::clamp(-w / 2.f + b.nx * w, -w / 2.f + e, w / 2.f - e);
+                float y = std::clamp(-h / 2.f + b.ny * h, -h / 2.f + e, h / 2.f - e);
+                drawPawCC(d, x, y, b.size, b.rotDeg * PI_F / 180.f, col);
+            }
+            return d;
+        }
+    };
 }
 
 class CkyPanel : public CCNode {
@@ -86,6 +278,7 @@ class CkyPanel : public CCNode {
     float   m_off = 0.f;
     float   m_maxOff = 0.f;
     int     m_tab = 0;
+    bool    m_anim = false;         // true only while a toggle was just tapped: the check pops in
     std::vector<CCNode*> m_hidden;
 
 public:
@@ -121,23 +314,32 @@ public:
         node->setContentSize({w, h});
         node->setAnchorPoint({0.5f, 0.5f});
 
-        auto border = CCScale9Sprite::create("square02_001.png");
-        border->setContentSize({w + 4.f, h + 4.f});
-        border->setColor(ccc3(0, 0, 0));
-        border->setPosition({w / 2.f, h / 2.f});
-        node->addChild(border, -1);
+        Kind kind = fxKind();
+        if (kind == Kind::Lava) {
+            // sharp chamfered ("hexagonal") corners with a hot rim, all in one draw node
+            auto bg = CCDrawNode::create();
+            bg->setTag(1);
+            drawLavaBtn(bg, w, h, color);
+            node->addChild(bg, 0);
+        } else {
+            auto border = CCScale9Sprite::create("square02_001.png");
+            border->setContentSize({w + 4.f, h + 4.f});
+            border->setColor(kind == Kind::Cat ? ccc3(240, 160, 156) : ccc3(0, 0, 0));
+            border->setPosition({w / 2.f, h / 2.f});
+            node->addChild(border, -1);
 
-        auto bg = CCScale9Sprite::create("square02_001.png");
-        bg->setContentSize({w, h});
-        bg->setColor(color);
-        bg->setPosition({w / 2.f, h / 2.f});
-        bg->setTag(1);
-        node->addChild(bg, 0);
+            auto bg = CCScale9Sprite::create("square02_001.png");
+            bg->setContentSize({w, h});
+            bg->setColor(color);
+            bg->setPosition({w / 2.f, h / 2.f});
+            bg->setTag(1);
+            node->addChild(bg, 0);
 
-        auto outline = CCDrawNode::create();
-        CCPoint v[4] = { {0.f, 0.f}, {w, 0.f}, {w, h}, {0.f, h} };
-        outline->drawPolygon(v, 4, ccc4f(0.f, 0.f, 0.f, 0.f), 1.5f, ccc4f(0.f, 0.f, 0.f, 1.f));
-        node->addChild(outline, 1);
+            auto outline = CCDrawNode::create();
+            CCPoint v[4] = { {0.f, 0.f}, {w, 0.f}, {w, h}, {0.f, h} };
+            outline->drawPolygon(v, 4, ccc4f(0.f, 0.f, 0.f, 0.f), 1.5f, ccc4f(0.f, 0.f, 0.f, 1.f));
+            node->addChild(outline, 1);
+        }
 
         auto lbl = CCLabelBMFont::create(text, "bigFont.fnt");
         lbl->setScale(ls);
@@ -148,8 +350,58 @@ public:
         auto item = CCMenuItemSpriteExtra::create(node, this, cb);
         item->setTag(tag);
         item->setPosition({x, y});
+        // Cat: springier press. GD's own button animation does the bounce (grow on touch, bounce back on
+        // release), we just raise how far it grows. No extra actions, no cost.
+        if (kind == Kind::Cat) item->m_scaleMultiplier = 1.16f;
         menu->addChild(item);
         return item;
+    }
+
+    // Cat / Lava toggle box (replaces the ON/OFF pill): a box that gets a check when ON
+    CCMenuItemSpriteExtra* makeToggle(CCMenu* menu, int tag, float x, float y) {
+        auto node = CCNode::create();
+        node->setContentSize({TOG_W, TOG_H});
+        node->setAnchorPoint({0.5f, 0.5f});
+
+        auto bg = CCDrawNode::create();
+        bg->setTag(1);
+        drawToggleBox(bg, false);
+        node->addChild(bg, 0);
+
+        auto holder = CCNode::create();                    // scales about its centre
+        holder->setTag(3);
+        holder->setPosition({TOG_W / 2.f, TOG_H / 2.f});
+        holder->setVisible(false);
+        auto chk = CCDrawNode::create();
+        drawToggleCheck(chk);
+        holder->addChild(chk);
+        node->addChild(holder, 1);
+
+        auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(CkyPanel::onPill));
+        item->setTag(tag);
+        item->setPosition({x, y});
+        if (fxKind() == Kind::Cat) item->m_scaleMultiplier = 1.16f;
+        menu->addChild(item);
+        return item;
+    }
+
+    static void paintToggle(CCMenuItemSpriteExtra* it, bool on, bool animate) {
+        auto n = it ? it->getNormalImage() : nullptr;
+        if (!n) return;
+        auto bg = typeinfo_cast<CCDrawNode*>(n->getChildByTag(1));
+        auto chk = n->getChildByTag(3);
+        if (!bg || !chk || chk->isVisible() == on) return;  // nothing changed -> nothing to redraw
+        drawToggleBox(bg, on);
+        chk->stopAllActions();
+        chk->setVisible(on);
+        if (on) {
+            if (animate) {
+                chk->setScale(0.2f);
+                chk->runAction(CCEaseBackOut::create(CCScaleTo::create(0.22f, 1.f)));
+            } else {
+                chk->setScale(1.f);
+            }
+        }
     }
 
     // small bordered button with a drawn gear on it
@@ -184,7 +436,12 @@ public:
     static void paint(CCMenuItemSpriteExtra* it, ccColor3B c) {
         if (!it) return;
         if (auto n = it->getNormalImage()) {
-            if (auto bg = typeinfo_cast<CCScale9Sprite*>(n->getChildByTag(1))) bg->setColor(c);
+            auto b = n->getChildByTag(1);
+            if (auto bg = typeinfo_cast<CCScale9Sprite*>(b)) bg->setColor(c);
+            else if (auto d = typeinfo_cast<CCDrawNode*>(b)) {   // Lava buttons are draw nodes
+                auto sz = n->getContentSize();
+                drawLavaBtn(d, sz.width, sz.height, c);
+            }
         }
     }
 
@@ -202,6 +459,7 @@ public:
     void setPill(int tag, bool on) {
         auto it = findBtn(tag);
         if (!it) return;
+        if (fxKind() != Kind::None) { paintToggle(it, on, m_anim); return; }
         retext(it, on ? "ON" : "OFF");
         paint(it, on ? kOn : kOff);
     }
@@ -224,12 +482,14 @@ public:
         l->setScale(0.4f);
         l->setAnchorPoint({0.f, 0.5f});
         l->setPosition({-72.f, m_y});
+        if (fxKind() == Kind::Cat) l->setColor(ccc3(214, 98, 124));
         m_rows->addChild(l);
     }
 
     void rowPill(char const* text, int tag) {
         rowLabel(text);
-        makeBtn(m_menu, menu_selector(CkyPanel::onPill), tag, 176.f, m_y, 58.f, 20.f, "OFF", kOff);
+        if (fxKind() != Kind::None) makeToggle(m_menu, tag, 190.f, m_y);
+        else makeBtn(m_menu, menu_selector(CkyPanel::onPill), tag, 176.f, m_y, 58.f, 20.f, "OFF", kOff);
         nextRow();
     }
 
@@ -239,6 +499,7 @@ public:
         auto v = CCLabelBMFont::create("", "bigFont.fnt");
         v->setScale(0.4f);
         v->setPosition({152.f, m_y});
+        if (fxKind() == Kind::Cat) v->setColor(ccc3(214, 98, 124));
         v->setTag(lbl);
         m_rows->addChild(v);
         makeBtn(m_menu, menu_selector(CkyPanel::onBtn), up, 184.f, m_y, 24.f, 20.f, "+", kAccent, 0.45f);
@@ -260,7 +521,7 @@ public:
         auto l = CCLabelBMFont::create("", "bigFont.fnt");
         l->setScale(0.35f);
         l->setAnchorPoint({0.f, 0.5f});
-        l->setColor(ccc3(150, 160, 190));
+        l->setColor(fxKind() == Kind::Cat ? ccc3(205, 130, 150) : ccc3(150, 160, 190));
         l->setPosition({-72.f, m_y});
         l->setTag(tag);
         m_rows->addChild(l);
@@ -290,7 +551,7 @@ public:
         auto l = CCLabelBMFont::create(text, "bigFont.fnt");
         l->setScale(0.3f);
         l->setAnchorPoint({0.f, 0.5f});
-        l->setColor(ccc3(150, 160, 190));
+        l->setColor(fxKind() == Kind::Cat ? ccc3(205, 130, 150) : ccc3(150, 160, 190));
         l->setPosition({-72.f, m_y});
         m_rows->addChild(l);
         nextRow(18.f);
@@ -319,6 +580,55 @@ public:
         applyScroll();
     }
 
+    // ---- Molten rocks window: chamfered card + sidebar, glowing heated-metal gradient border ----
+    // Static, drawn once. The border is layered OPAQUE strokes (wide+dim -> thin+bright) so it glows without
+    // any alpha-overlap beads, and each stroke piece is coloured by its height: hot at the top, deep red below.
+    void buildLavaChrome(float W, float H) {
+        auto d = CCDrawNode::create();
+        float cc = 14.f;                                       // window chamfer
+        ccColor3B card = kCard, side = kSide;
+        {
+            CCPoint v[8];
+            chamferPts(v, -W / 2.f + 1.f, -H / 2.f + 1.f, W / 2.f - 1.f, H / 2.f - 1.f, cc);
+            d->drawPolygon(v, 8, pm3(card, 0.97f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
+        }
+        {
+            CCPoint v[8];
+            chamferPts(v, -149.f - 59.f, -(H - 20.f) / 2.f, -149.f + 59.f, (H - 20.f) / 2.f, 8.f);
+            d->drawPolygon(v, 8, pm3(side), 0.f, pm(0.f, 0.f, 0.f, 0.f));
+        }
+
+        auto top = thm().top, bot = thm().bottom;
+        auto colAt = [&](float y, float mix) {
+            float t = std::clamp((y + H / 2.f) / H, 0.f, 1.f);
+            float r = (bot.r + (top.r - bot.r) * t) / 255.f;
+            float g = (bot.g + (top.g - bot.g) * t) / 255.f;
+            float b = (bot.b + (top.b - bot.b) * t) / 255.f;
+            return ccc4f(card.r / 255.f + (r - card.r / 255.f) * mix,
+                         card.g / 255.f + (g - card.g / 255.f) * mix,
+                         card.b / 255.f + (b - card.b / 255.f) * mix, 1.f);
+        };
+        CCPoint p[8];
+        chamferPts(p, -W / 2.f + 5.f, -H / 2.f + 5.f, W / 2.f - 5.f, H / 2.f - 5.f, cc - 3.f);
+        auto stroke = [&](float radius, float mix) {
+            for (int i = 0; i < 8; ++i) {
+                CCPoint a = p[i], b = p[(i + 1) % 8];
+                float len = ccpDistance(a, b);
+                int n = std::max(1, static_cast<int>(std::ceil(len / 24.f)));
+                for (int k = 0; k < n; ++k) {
+                    CCPoint s0 = ccpLerp(a, b, static_cast<float>(k) / n);
+                    CCPoint s1 = ccpLerp(a, b, static_cast<float>(k + 1) / n);
+                    d->drawSegment(s0, s1, radius, colAt((s0.y + s1.y) * 0.5f, mix));
+                }
+            }
+        };
+        stroke(5.f, 0.22f);     // outer glow
+        stroke(3.6f, 0.50f);
+        stroke(2.2f, 0.80f);
+        stroke(1.0f, 1.00f);    // white-hot core line
+        this->addChild(d, 1);
+    }
+
     // ---- build ----
     bool init() override {
         if (!CCNode::init()) return false;
@@ -326,24 +636,40 @@ public:
         cky::theme = Mod::get()->getSavedValue<int>("theme", 0);
         float W = 440.f, H = 270.f;
 
-        auto frame = CCLayerGradient::create(thm().top, thm().bottom);
-        frame->setContentSize({W, H});
-        frame->setVector({0.f, -1.f});
-        frame->ignoreAnchorPointForPosition(false);
-        frame->setPosition({0.f, 0.f});
-        this->addChild(frame);
+        Kind kind = fxKind();
+        // the box particles live in (card interior, a few px in so chamfered corners stay clear)
+        cky::fx::Rect box{ -(W - 12.f) / 2.f + 4.f, -(H - 12.f) / 2.f + 4.f,
+                            (W - 12.f) / 2.f - 4.f,  (H - 12.f) / 2.f - 4.f };
 
-        auto card = CCScale9Sprite::create("square02_001.png");
-        card->setContentSize({W - 12.f, H - 12.f});
-        card->setColor(kCard);
-        card->setOpacity(245);
-        this->addChild(card, 1);
+        if (kind == Kind::Lava) {
+            buildLavaChrome(W, H);
+        } else {
+            auto frame = CCLayerGradient::create(thm().top, thm().bottom);
+            frame->setContentSize({W, H});
+            frame->setVector({0.f, -1.f});
+            frame->ignoreAnchorPointForPosition(false);
+            frame->setPosition({0.f, 0.f});
+            this->addChild(frame);
 
-        auto side = CCScale9Sprite::create("square02_001.png");
-        side->setContentSize({118.f, H - 20.f});
-        side->setColor(kSide);
-        side->setPosition({-149.f, 0.f});
-        this->addChild(side, 2);
+            auto card = CCScale9Sprite::create("square02_001.png");
+            card->setContentSize({W - 12.f, H - 12.f});
+            card->setColor(kCard);
+            card->setOpacity(245);
+            this->addChild(card, 1);
+
+            auto side = CCScale9Sprite::create("square02_001.png");
+            side->setContentSize({118.f, H - 20.f});
+            side->setColor(kSide);
+            side->setPosition({-149.f, 0.f});
+            this->addChild(side, 2);
+        }
+
+        if (kind == Kind::Cat) {
+            this->addChild(CkyFx::makeBgPaws(W - 12.f, H - 12.f), 2);               // scattered paws, 0.4 opacity
+            this->addChild(CkyFx::create(CkyFx::Mode::Paws, box), 6);               // click paws, on top
+        } else if (kind == Kind::Lava) {
+            this->addChild(CkyFx::create(CkyFx::Mode::Embers, box), 2);             // rising embers, behind the widgets
+        }
 
         auto title = CCLabelBMFont::create("ChxrCky", "bigFont.fnt");
         title->setScale(0.55f);
@@ -353,7 +679,7 @@ public:
 
         auto sub = CCLabelBMFont::create("Macro Bot", "bigFont.fnt");
         sub->setScale(0.3f);
-        sub->setColor(ccc3(150, 160, 190));
+        sub->setColor(fxKind() == Kind::Cat ? ccc3(210, 140, 160) : ccc3(150, 160, 190));
         sub->setPosition({-149.f, 92.f});
         this->addChild(sub, 3);
 
@@ -759,7 +1085,9 @@ public:
         default: break;
         }
         cky::labelsSave(); // label switches are remembered between launches
+        m_anim = true;     // the check pops in only for a real tap, not when a tab is (re)built
         refresh();
+        m_anim = false;
         ckyHudRefresh();
     }
 

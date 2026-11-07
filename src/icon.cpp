@@ -1,4 +1,4 @@
-// icon.cpp — draggable Square Cky button (main menu + pause screen)
+// icon.cpp — draggable round Cky button (0.5 opacity idle, 1.0 while held) (main menu + pause screen)
 #include "state.hpp"
 #include "icons.hpp"
 #include <Geode/modify/MenuLayer.hpp>
@@ -9,6 +9,15 @@ class CkyIcon : public CCLayer {
     CCPoint m_start;
     CCPoint m_grab;
     static constexpr float RADIUS = 22.f;
+    static constexpr float IDLE_ALPHA = 0.5f;   // resting opacity; 1.0 the instant it is touched
+    CCNode* m_idle = nullptr;
+    CCNode* m_held = nullptr;
+
+    // instant swap between the two pre-built versions: zero per-frame cost
+    void setHeld(bool held) {
+        if (m_idle) m_idle->setVisible(!held);
+        if (m_held) m_held->setVisible(held);
+    }
 
 public:
     static CkyIcon* create() {
@@ -21,9 +30,14 @@ public:
     bool init() override {
         if (!CCLayer::init()) return false;
         this->setID("cky-icon");
-        auto logo = ckyMakeLogo(RADIUS * 2.f);
-        logo->setPosition({0.f, 0.f});
-        this->addChild(logo);
+        // CCDrawNode ignores node opacity, so the 0.5 look is its own copy drawn with 0.5 alpha
+        m_idle = ckyMakeLogo(RADIUS * 2.f, IDLE_ALPHA);
+        m_held = ckyMakeLogo(RADIUS * 2.f, 1.f);
+        m_idle->setPosition({0.f, 0.f});
+        m_held->setPosition({0.f, 0.f});
+        this->addChild(m_idle);
+        this->addChild(m_held);
+        setHeld(false);
         this->setTouchEnabled(true);
         return true;
     }
@@ -44,6 +58,7 @@ public:
         m_moved = false;
         m_start = p;
         m_grab = ccpSub(this->getPosition(), p);
+        setHeld(true);                         // pressed / held -> 1.0 right away
         return true;
     }
 
@@ -60,6 +75,7 @@ public:
     }
 
     void ccTouchEnded(CCTouch*, CCEvent*) override {
+        setHeld(false);                        // released -> back to 0.5
         if (m_moved) {
             cky::savePos("cky-icon", this->getPosition());
         } else {
@@ -68,6 +84,7 @@ public:
     }
 
     void ccTouchCancelled(CCTouch*, CCEvent*) override {
+        setHeld(false);
         if (m_moved) cky::savePos("cky-icon", this->getPosition());
     }
 };
