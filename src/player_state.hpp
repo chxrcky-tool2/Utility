@@ -12,6 +12,7 @@
 // copyable), so renamed/removed members are skipped instead of breaking the build.
 #pragma once
 #include "traj_fields.hpp"
+#include "real_fields.hpp" // dash / holding state, real players only
 
 #include <Geode/Geode.hpp>
 #include <cstdint>
@@ -47,6 +48,7 @@ namespace cky {
         auto run = [&](auto* d) {
 #define CKY_PS_CAP(f) if constexpr (CKY_PS_OK(f)) { psPut(s.bytes, d->f); }
             CKY_TRAJ_FIELDS(CKY_PS_CAP)
+            CKY_REAL_FIELDS(CKY_PS_CAP)
 #undef CKY_PS_CAP
         };
         run(p);
@@ -69,6 +71,7 @@ namespace cky {
                 off += sizeof(tmp); \
             }
             CKY_TRAJ_FIELDS(CKY_PS_PUT)
+            CKY_REAL_FIELDS(CKY_PS_PUT)
 #undef CKY_PS_PUT
         };
         run(p);
