@@ -265,6 +265,18 @@ namespace {
             cky::hitboxes = hb;
             ckyApplyHitboxes();
         }
+        bool ht = cky::hitboxTrail;
+        if (ImGui::Checkbox("Hitbox trail", &ht)) {
+            cky::hitboxTrail = ht;
+            ckyTrailApply();
+        }
+        if (ImGui::TreeNode("Hitbox trail settings")) {
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            if (ImGui::SliderInt("Trail length (steps)", &cky::trailLen, 20, 1200)) ckyTrailSave();
+            if (ImGui::ColorEdit4("Outer hitbox", cky::trailOuter)) ckyTrailSave();
+            if (ImGui::ColorEdit4("Inner hitbox", cky::trailInner)) ckyTrailSave();
+            ImGui::TreePop();
+        }
         bool hud = cky::hudOn;
         if (ImGui::Checkbox("HUD", &hud)) {
             cky::hudOn = hud;

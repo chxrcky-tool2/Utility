@@ -68,7 +68,7 @@ namespace {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
-        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS,
+        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS, T_TRAIL,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
@@ -78,6 +78,15 @@ namespace {
         L_PACK, L_THEME, L_OFF, L_VOL, L_TLEN, L_FI,
         S_UP = 95, S_DN = 96,
         TAB_BASE = 100
+    };
+
+    // hitbox trail page (kept above the other tag ranges)
+    enum : int {
+        B_TR_GEAR = 200, B_TR_BACK, B_TRL_DN, B_TRL_UP,
+        B_TRC_BASE = 210,   // 210..225: [which*8 + channel*2 + (up ? 1 : 0)], which 0 = outer, 1 = inner
+        L_TRL = 230,
+        L_TRC_BASE = 231,   // 231..238: [which*4 + channel]
+        L_SW_OUT = 240, L_SW_IN
     };
 
     constexpr float ROW = 28.f;
@@ -278,6 +287,25 @@ public:
         nextRow(22.f);
     }
 
+    // label + a color swatch (drawn in refresh())
+    void rowSwatch(char const* text, int tag) {
+        rowLabel(text);
+        auto sw = CCDrawNode::create();
+        sw->setTag(tag);
+        sw->setPosition({176.f, m_y});
+        m_rows->addChild(sw);
+        nextRow();
+    }
+
+    void paintSwatch(int tag, float const* c) {
+        if (!m_rows) return;
+        auto sw = typeinfo_cast<CCDrawNode*>(m_rows->getChildByTag(tag));
+        if (!sw) return;
+        sw->clear();
+        CCPoint v[4] = { {-29.f, -8.f}, {29.f, -8.f}, {29.f, 8.f}, {-29.f, 8.f} };
+        sw->drawPolygon(v, 4, ccc4f(c[0], c[1], c[2], std::max(c[3], 0.15f)), 1.5f, ccc4f(0.f, 0.f, 0.f, 1.f));
+    }
+
     void rowText(char const* text) {
         auto l = CCLabelBMFont::create(text, "bigFont.fnt");
         l->setScale(0.3f);
@@ -391,8 +419,8 @@ public:
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_UP, 112.f, 113.f, 38.f, 18.f, "Up", kAccent, 0.35f);
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_DN, 156.f, 113.f, 38.f, 18.f, "Dn", kAccent, 0.35f);
 
-        static char const* names[7] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
-                                        "HUD settings" };
+        static char const* names[8] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
+                                        "HUD settings", "Hitbox trail" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
@@ -438,6 +466,11 @@ public:
         case 3:
             rowPill("Hitboxes", T_HITBOX);
             {
+                float ty = m_y;
+                rowPill("Hitbox trail", T_TRAIL);
+                makeGear(m_menu, B_TR_GEAR, 122.f, ty);
+            }
+            {
                 float hy = m_y;
                 rowPill("HUD", T_HUD);
                 makeGear(m_menu, B_HUDGEAR, 122.f, hy);
@@ -465,6 +498,19 @@ public:
             rowPill("Buffer while playing", T_BACKALWAYS);
             rowWide("Back to Display", B_HUDBACK);
             break;
+        case 7: {
+            rowValue("Trail length", B_TRL_DN, B_TRL_UP, L_TRL);
+            static char const* chn[4] = { "  Red", "  Green", "  Blue", "  Opacity" };
+            for (int which = 0; which < 2; ++which) {
+                rowSwatch(which == 0 ? "Outer hitbox" : "Inner hitbox", which == 0 ? L_SW_OUT : L_SW_IN);
+                for (int ch = 0; ch < 4; ++ch) {
+                    int base = B_TRC_BASE + which * 8 + ch * 2;
+                    rowValue(chn[ch], base, base + 1, L_TRC_BASE + which * 4 + ch);
+                }
+            }
+            rowWide("Back to Display", B_TR_BACK);
+            break;
+        }
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
             rowWide("Reset icon position", B_RESETPOS);
@@ -490,7 +536,7 @@ public:
     void refreshTabs() {
         for (int i = 0; i < 6; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
-            paint(it, i == (m_tab == 6 ? 3 : m_tab) ? kAccent : kTab);
+            paint(it, i == (m_tab >= 6 ? 3 : m_tab) ? kAccent : kTab);
         }
     }
 
@@ -506,6 +552,7 @@ public:
         setPill(T_NCACC, cky::ncShowAcc);
         setPill(T_NCDEATH, cky::ncShowDeaths);
         setPill(T_HITBOX, cky::hitboxes);
+        setPill(T_TRAIL, cky::hitboxTrail);
         setPill(T_HUD, cky::hudOn);
         setPill(T_STARTPOS, cky::startPosOn);
         setPill(T_TELEM, cky::ckptTelemetry);
@@ -521,6 +568,15 @@ public:
         setPill(T_SPEEDBTNS, cky::speedBtns);
         setPill(T_BACKALWAYS, cky::backAlways);
         setText(L_TLEN, fmt::format("{}", cky::trajLen));
+        setText(L_TRL, fmt::format("{}", cky::trailLen));
+        for (int which = 0; which < 2; ++which) {
+            float const* c = which == 0 ? cky::trailOuter : cky::trailInner;
+            for (int ch = 0; ch < 4; ++ch) {
+                setText(L_TRC_BASE + which * 4 + ch,
+                    fmt::format("{}", static_cast<int>(std::lround(c[ch] * 255.f))));
+            }
+            paintSwatch(which == 0 ? L_SW_OUT : L_SW_IN, c);
+        }
         {
             std::string n = ckyClickPackName();
             if (n.size() > 9) n = n.substr(0, 8) + "~";
@@ -622,6 +678,10 @@ public:
             cky::hitboxes = !cky::hitboxes;
             ckyApplyHitboxes();
             break;
+        case T_TRAIL:
+            cky::hitboxTrail = !cky::hitboxTrail;
+            ckyTrailApply();
+            break;
         case T_HUD:
             cky::hudOn = !cky::hudOn;
             if (auto h = ckyHudNode()) h->setVisible(cky::hudOn);
@@ -686,7 +746,29 @@ public:
 
     void onBtn(CCObject* s) {
         int t = static_cast<CCNode*>(s)->getTag();
+        if (t >= B_TRC_BASE && t < B_TRC_BASE + 16) {
+            // hitbox trail color: R/G/B/opacity of the outer or inner hitbox, steps of 15/255
+            int i = t - B_TRC_BASE;
+            float* c = (i / 8 == 0) ? cky::trailOuter : cky::trailInner;
+            int ch = (i % 8) / 2;
+            int v = static_cast<int>(std::lround(c[ch] * 255.f)) + ((i % 2) ? 15 : -15);
+            c[ch] = static_cast<float>(std::clamp(v, 0, 255)) / 255.f;
+            ckyTrailSave();
+            refresh();
+            return;
+        }
         switch (t) {
+        case B_TRL_DN:
+        case B_TRL_UP:
+            cky::trailLen = std::clamp(cky::trailLen + (t == B_TRL_UP ? 20 : -20), 20, 1200);
+            ckyTrailSave();
+            break;
+        case B_TR_GEAR:
+            buildTab(7);
+            return;
+        case B_TR_BACK:
+            buildTab(3);
+            return;
         case B_SAVE: {
             bool ok = cky::save();
             ckyNotify(ok ? fmt::format("Saved to slot {}", cky::slot).c_str() : "Save failed", ok);
