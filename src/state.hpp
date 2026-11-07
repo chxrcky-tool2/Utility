@@ -14,6 +14,7 @@
 using namespace geode::prelude;
 
 #include "player_state.hpp"
+#include "fixstate.hpp"
 #include "themes.hpp"
 
 // per-step player snapshot used by "Frame fixes" (position + rotation of both players)
@@ -23,6 +24,8 @@ struct FrameFix {
     float x2, y2, r2;
     double yv1 = 0.0, yv2 = 0.0; // vertical velocity of each player (CKY4)
     bool   hasVel = true;        // false for fixes loaded from old CKY3 files
+    FixExtra e1, e2;             // on-ground / dash / jump-buffer state of each player (CKY5)
+    bool   hasExtra = false;     // false for fixes loaded from CKY3 / CKY4 files
 };
 
 // one input that reached the game, tagged with the physics step it happened on (back step re-sim)
@@ -48,6 +51,12 @@ void ckyOpenPanel(CCNode* host);
 void ckySetStartPosVisible(bool on);
 void ckyBuildStartPos(PlayLayer* pl);
 void ckyBuildOverlay(PlayLayer* pl);
+// labels (labels.cpp): FPS / startpos run / level time / best run
+void ckyBuildLabels(PlayLayer* pl);
+void ckyRunReset();
+void ckyRunBegin();
+void ckyRunDeath();
+void ckyRunComplete();
 void ckyOverlayShow(std::string const& text, bool good = true);
 void ckyTelemetryPress();
 void ckyTelemetryReset();
@@ -86,6 +95,7 @@ namespace cky {
     constexpr uint32_t MAGIC2 = 0x32594B43; // "CKY2"
     constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes: position + rotation)
     constexpr uint32_t MAGIC4 = 0x34594B43; // "CKY4" (CKY3 + vertical velocity in frame fixes)
+    constexpr uint32_t MAGIC5 = 0x35594B43; // "CKY5" (CKY4 + on-ground / dash / jump-buffer state in frame fixes)
     constexpr int P2_FLAG = 0x100;
     constexpr uint32_t MAX_ENTRIES = 10000000;
     constexpr int MAX_SLOTS = 20;
@@ -444,7 +454,7 @@ namespace cky {
     inline bool save() {
         std::ofstream f(slotPath(), std::ios::binary | std::ios::trunc);
         if (!f) return false;
-        wr<uint32_t>(f, MAGIC4);
+        wr<uint32_t>(f, MAGIC5);
         wr<float>(f, macroTps);
         wr<uint32_t>(f, static_cast<uint32_t>(macro.size()));
         for (auto const& entry : macro) {
@@ -458,6 +468,11 @@ namespace cky {
             wr<float>(f, x.x1); wr<float>(f, x.y1); wr<float>(f, x.r1);
             wr<float>(f, x.x2); wr<float>(f, x.y2); wr<float>(f, x.r2);
             wr<double>(f, x.yv1); wr<double>(f, x.yv2);
+            for (FixExtra const* e : { &x.e1, &x.e2 }) {
+                wr<uint8_t>(f, e->flags);
+                wr<double>(f, e->dashX); wr<double>(f, e->dashY);
+                wr<double>(f, e->dashAngle); wr<double>(f, e->dashStart);
+            }
         }
         return f.good();
     }
@@ -482,7 +497,7 @@ namespace cky {
         uint32_t magic = 0, count = 0;
         float t = 240.f;
         if (!rd(f, magic)) return false;
-        if (magic == MAGIC2 || magic == MAGIC3 || magic == MAGIC4) {
+        if (magic == MAGIC2 || magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5) {
             if (!rd(f, t)) return false;
         } else if (magic != MAGIC1) {
             return false;
@@ -503,7 +518,7 @@ namespace cky {
             tmp.push_back({ fr, press != 0, btn });
         }
         std::vector<FrameFix> fx;
-        if (magic == MAGIC3 || magic == MAGIC4) {
+        if (magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5) {
             uint32_t fc = 0;
             if (!rd(f, fc) || fc > MAX_ENTRIES) return false;
             fx.reserve(fc);
@@ -513,8 +528,15 @@ namespace cky {
                 if (!rd(f, x.frame) || !rd(f, x.x1) || !rd(f, x.y1) || !rd(f, x.r1)
                     || !rd(f, x.x2) || !rd(f, x.y2) || !rd(f, x.r2)) return false;
                 // CKY3 files have no velocity: yv stays 0 and is skipped on playback
-                if (magic == MAGIC4 && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
-                x.hasVel = (magic == MAGIC4);
+                if ((magic == MAGIC4 || magic == MAGIC5) && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
+                x.hasVel = (magic == MAGIC4 || magic == MAGIC5);
+                if (magic == MAGIC5) {
+                    for (FixExtra* e : { &x.e1, &x.e2 }) {
+                        if (!rd(f, e->flags) || !rd(f, e->dashX) || !rd(f, e->dashY)
+                            || !rd(f, e->dashAngle) || !rd(f, e->dashStart)) return false;
+                    }
+                    x.hasExtra = true;
+                }
                 if (x.frame < lastFix) return false;
                 lastFix = x.frame;
                 fx.push_back(x);
@@ -526,6 +548,37 @@ namespace cky {
         macroTps = t;
         cursor = 0;
         return true;
+    }
+}
+
+// ---------- label switches (Labels tab) ----------
+namespace cky {
+    // CPS = clickHudOn, noclip accuracy / deaths = ncShowAcc / ncShowDeaths (declared above)
+    inline bool lblFps  = false;
+    inline bool lblRun  = false;   // "12-56": where the attempt started and where it is / ended
+    inline bool lblTime = false;   // level time
+    inline bool lblBest = false;   // best run of this session in this level
+
+    inline void labelsSave() {
+        auto m = Mod::get();
+        m->setSavedValue<bool>("lbl-cps", clickHudOn);
+        m->setSavedValue<bool>("lbl-fps", lblFps);
+        m->setSavedValue<bool>("lbl-nc-acc", ncShowAcc);
+        m->setSavedValue<bool>("lbl-nc-deaths", ncShowDeaths);
+        m->setSavedValue<bool>("lbl-run", lblRun);
+        m->setSavedValue<bool>("lbl-time", lblTime);
+        m->setSavedValue<bool>("lbl-best", lblBest);
+    }
+
+    inline void labelsLoad() {
+        auto m = Mod::get();
+        clickHudOn   = m->getSavedValue<bool>("lbl-cps", clickHudOn);
+        lblFps       = m->getSavedValue<bool>("lbl-fps", lblFps);
+        ncShowAcc    = m->getSavedValue<bool>("lbl-nc-acc", ncShowAcc);
+        ncShowDeaths = m->getSavedValue<bool>("lbl-nc-deaths", ncShowDeaths);
+        lblRun       = m->getSavedValue<bool>("lbl-run", lblRun);
+        lblTime      = m->getSavedValue<bool>("lbl-time", lblTime);
+        lblBest      = m->getSavedValue<bool>("lbl-best", lblBest);
     }
 }
 
