@@ -17,6 +17,11 @@ namespace {
     struct CpState { CkyPlayerState p1, p2; };
     std::unordered_map<CheckpointObject*, CpState> g_cpStates;
 
+    // where in the macro each practice checkpoint was placed (step, clock, number of inputs).
+    // Keyed by the checkpoint object itself, so a restart resumes from exactly the checkpoint the
+    // game loads (the last one in its list) - not from a guess made by counting checkpoints.
+    std::unordered_map<CheckpointObject*, cky::Cp> g_cpInfo;
+
     // game time in steps (m_levelTime * TPS), only used to compare with our own counter in the log
     template <class S>
     double ckyLevelFrame(S const& st) {
@@ -472,16 +477,30 @@ class $modify(CkyPlayLayer, PlayLayer) {
     // practice fixes: remember the full player state next to every practice checkpoint
     CheckpointObject* createCheckpoint() {
         auto cp = PlayLayer::createCheckpoint();
-        if (!cp || cky::anchoring || !cky::practiceFixes) return cp;
-        if (g_cpStates.size() > 512) { // drop states of checkpoints that no longer exist
+        if (!cp || cky::anchoring) return cp;
+
+        // forget checkpoints that no longer exist (removed, or dropped by the game)
+        if (g_cpInfo.size() > 512 || g_cpStates.size() > 512) {
             std::unordered_set<CheckpointObject*> live;
             if (m_checkpointArray) {
                 for (auto c : CCArrayExt<CheckpointObject*>(m_checkpointArray)) live.insert(c);
+            }
+            for (auto it = g_cpInfo.begin(); it != g_cpInfo.end();) {
+                it = live.contains(it->first) ? std::next(it) : g_cpInfo.erase(it);
             }
             for (auto it = g_cpStates.begin(); it != g_cpStates.end();) {
                 it = live.contains(it->first) ? std::next(it) : g_cpStates.erase(it);
             }
         }
+
+        // remember where in the recording / playback this checkpoint was placed
+        if ((cky::recording && cky::recArmed) || (cky::playing && cky::playArmed)) {
+            g_cpInfo[cp] = { cky::step, cky::frameClock, cky::macro.size(), true };
+            log::info("[cky] checkpoint placed: step {} inputs {} (checkpoint list {})",
+                cky::step, cky::macro.size(), m_checkpointArray ? m_checkpointArray->count() : 0);
+        }
+
+        if (!cky::practiceFixes) return cp;
         g_cpStates[cp] = { cky::capturePlayer(m_player1), cky::capturePlayer(m_player2) };
         return cp;
     }
@@ -507,6 +526,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
         g_cpStates.clear();
+        g_cpInfo.clear();
         cky::step = 0;
         cky::frameClock = 0.0;
         cky::cursor = 0;
@@ -537,14 +557,23 @@ class $modify(CkyPlayLayer, PlayLayer) {
         bool resume = false;      // recording resumes at the checkpoint
         bool resumePlay = false;  // playback resumes at the checkpoint
         cky::Cp cp{};
-        bool cpOk = m_isPracticeMode && m_checkpointArray && m_checkpointArray->count() > 0
-            && !cky::ckpts.empty() && cky::ckpts.back().valid;
+        bool cpOk = false;
+        if (m_isPracticeMode && m_checkpointArray && m_checkpointArray->count() > 0
+            && ((cky::recording && cky::recArmed) || (cky::playing && cky::playArmed))) {
+            // the game resumes from the LAST checkpoint in its list: use that same object
+            auto last = static_cast<CheckpointObject*>(m_checkpointArray->lastObject());
+            auto it = g_cpInfo.find(last);
+            if (it != g_cpInfo.end() && it->second.valid) {
+                cp = it->second;
+                cpOk = true;
+            } else {
+                log::warn("[cky] restart: the last checkpoint was not placed while recording / playing, starting from zero");
+            }
+        }
         if (cpOk && cky::recording && cky::recArmed) {
             resume = true;
-            cp = cky::ckpts.back();
         } else if (cpOk && cky::playing && cky::playArmed) {
             resumePlay = true;
-            cp = cky::ckpts.back();
         }
 
         PlayLayer::resetLevel();
