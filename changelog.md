@@ -7,7 +7,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **Desync log:** the first-desync and sync-check log lines now also show the game's own time-based frame next to our step counter.
 - **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step.
 - **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
-- **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset, plus Cat, Vintage, Sky, Lavender and Rose. Ocean got a richer aqua-to-deep-blue palette.
+- **Theme Engine:** 20 UI themes, named in dot style: .ne, .sea, .leaf, .dusk, .null, .meow, .vinyl, .cloud, .lilac, .thorn, .tech, .red, .glitch, .Au, .earth, .U, .vamp, .lava, .mojito and .ice. Ocean got a richer aqua-to-deep-blue palette.
+- **Theme = macro format:** macros are now saved with the active theme's name as the file extension (e.g. `Level_123_slot1.sea`, `.Au`, `.vamp`). Same CKY data inside. Loading takes the most recently saved file among every theme extension and the old `.cky`, so changing theme never hides a macro and old macros keep working.
+- **Theme table:** all themes now live in one place, `src/themes.hpp`, shared by the Cocos menu, the ImGui menu and the HUD.
 - **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.
 - **License Info:** Added GPL-3.0 license information directly to the settings menu.
 - **Show trajectory:** My actual best update. Draws the future path. Has a slider for the trajectory to become longer.
@@ -18,6 +20,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **Hitbox fallback + diagnostic log:** Added an extra draw call for hitboxes and a `[cky] hitbox diag:` log line. (untested)
 - **Custom TPS Slider:** Added a TPS slider ranging from 1 to 6000. (Note: Real-time performance depends on the device; high TPS may cause extreme lag on mobile).
 - **HUD Displayer Settings:** Tweaked and improved the on-screen HUD settings for better customizability and display accuracy.
+
+### Removed
+- **Removed the .cky format.** The macro format is now chosen by the theme (Settings of the mod). Old `.cky` files still load.
 
 ### Fixed
 - **Back step:** it now works right after pausing. While playing, a few light "anchor" snapshots are kept per second (no TPS lag), so Back jumps to the last one; after that, stepping forward makes exact one-frame back steps again.

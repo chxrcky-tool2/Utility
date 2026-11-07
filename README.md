@@ -23,6 +23,8 @@ Makes the player stops at a specific frame, and can step frame by frame
 Importing click packs in your clicks folder, will make your click sound whenever you press.
 **UI border changer:**
 Self explanatory for its name lmao
+**Theme = macro format:**
+20 themes, and the active theme is also the extension your macros save with (.sea, .Au, .vamp, ...). Old .cky macros and macros from other themes still load.
 **Hitbox trail:**
 Draws the player's hitboxes left behind every step. Length and colors (outer/inner) are adjustable.
 **HUD:**
