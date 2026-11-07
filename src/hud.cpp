@@ -1,11 +1,13 @@
 // hud.cpp — in-level HUD: frame stepper (top-left), speedhack (top-right), big accuracy
 //
 // Per-theme look (all colours still come from themes.hpp):
-//   Cyber        40% glass, thin chamfered cyan outline, tight padding
-//   Matrix       no boxes at all, drop-shadowed text, compact layout
-//   Cat          50% translucent glass, hairline peach border, tight spacing
-//   Molten rocks 30% panel, glowing cracked-lava texture, cracked-obsidian border, rising embers
+//   Cyber        deep-blue glass, thin chamfered cyan outline, tight padding
+//   Matrix       black terminal box, thin green border, drop-shadowed text, compact layout
+//   Cat          pink-white glass, hairline peach border, tight spacing
+//   Molten rocks charcoal panel, glowing cracked-lava texture, cracked-obsidian border, rising embers
 //   every other theme: unchanged
+// The panel fill of EVERY theme follows cky::hudOpacity (the "HUD opacity" setting). Only this in-level HUD does:
+// the Cocos panel and the ImGui menu are always fully opaque.
 #include "state.hpp"
 #include "icons.hpp"
 #include "fx.hpp"
@@ -31,18 +33,23 @@ namespace {
     int themeIdx() { return std::clamp(cky::theme, 0, cky::ThemeCount - 1); }
     Kind kind() { return fx::kindOf(themeIdx()); }
 
+    // the "HUD opacity" setting: fill opacity of every HUD panel. Outlines stay crisper than the fill so a very
+    // faint panel still reads as a panel.
+    float hudA()  { return std::clamp(cky::hudOpacity, 0.1f, 1.f); }
+    float edgeA() { return 0.55f + 0.45f * hudA(); }
+
     // ---------- layout: every number that depends on the theme lives here ----------
     struct Lay {
         float pillH, stepW, speedW, btnD, margin, radius, border;
         float stepPad, speedPad, gap, lblGap;       // padding inside the pill, button pitch, gap button -> text
         float lblStep, lblSpeed, lblInfo;           // label scales
         float rowY, infoY, infoX;                   // main row / info line / info inset
-        bool  panels;                               // false = no panel box at all (Matrix)
+        bool  panels;                               // (every theme has a panel now; kept for the layout table)
     };
     //                                 pillH stepW speedW btnD  mrg  rad  bord  sPad  vPad  gap  lblG  lS    lV    lI    rowY    infoY  infoX  panels
     constexpr Lay kLayDefault = { 44.f, 190.f, 158.f, 28.f, 10.f, 12.f, 1.6f, 6.f, 8.f, 32.f, 8.f, .34f, .42f, .20f, -17.f, -37.f, 10.f, true  };
     constexpr Lay kLayCyber   = { 34.f, 168.f, 138.f, 22.f,  6.f,  5.f, 0.7f, 5.f, 6.f, 26.f, 6.f, .30f, .36f, .17f, -13.f, -27.5f, 7.f, true  };
-    constexpr Lay kLayMatrix  = { 30.f, 150.f, 122.f, 20.f,  6.f,  0.f, 0.f,  2.f, 2.f, 23.f, 5.f, .28f, .32f, .16f, -11.5f, -24.f, 3.f, false };
+    constexpr Lay kLayMatrix  = { 30.f, 150.f, 122.f, 20.f,  6.f,  0.f, 0.7f, 5.f, 5.f, 23.f, 5.f, .28f, .32f, .16f, -11.5f, -24.f, 5.f, true  };
     constexpr Lay kLayCat     = { 36.f, 172.f, 142.f, 23.f,  8.f, 10.f, 0.7f, 5.f, 6.f, 27.f, 6.f, .31f, .37f, .17f, -13.5f, -28.5f, 8.f, true  };
 
     Lay const& L() {
@@ -77,7 +84,8 @@ namespace {
     // dark panel tinted with the theme colour (themes that have no look of their own)
     ccColor4F themePanel() {
         auto lo = themeLo();
-        return ccc4f(0.04f + lo.r * 0.22f, 0.04f + lo.g * 0.22f, 0.07f + lo.b * 0.22f, 0.78f);
+        float a = hudA();
+        return ccc4f((0.04f + lo.r * 0.22f) * a, (0.04f + lo.g * 0.22f) * a, (0.07f + lo.b * 0.22f) * a, a);   // premultiplied
     }
     ccColor4F themeBtnBg() {
         auto lo = themeLo();
@@ -92,12 +100,13 @@ namespace {
     // text colours: Cat's glass is light, so its text is dark rose; everything else is light on dark
     bool lightGlass() { return kind() == Kind::Cat; }
     ccColor3B textMain() { return lightGlass() ? ccc3(128, 50, 74)   : ccc3(255, 255, 255); }
-    ccColor3B textDim()  { return lightGlass() ? ccc3(176, 128, 140) : ccc3(150, 150, 165); }
+    ccColor3B textDim()  { return lightGlass() ? ccc3(150, 96, 112)  : ccc3(172, 174, 190); }
     ccColor3B textWarn() { return lightGlass() ? ccc3(196, 104, 24)  : ccc3(255, 205, 120); }
     ccColor3B textOk()   { return lightGlass() ? ccc3(36, 140, 76)   : ccc3(120, 255, 150); }
     ccColor3B textAlert(){ return lightGlass() ? ccc3(204, 112, 16)  : ccc3(255, 190, 90); }
     ccColor3B textInfo() {
-        if (lightGlass()) return ccc3(176, 72, 100);
+        if (lightGlass()) return ccc3(150, 52, 84);
+        if (kind() == Kind::Lava) return ccc3(255, 228, 90);      // bright yellow: readable on the lava panel
         ccColor4F hi = themeHi();
         return toC3(ccc4f(0.5f + hi.r * 0.5f, 0.5f + hi.g * 0.5f, 0.5f + hi.b * 0.5f, 1.f));
     }
@@ -125,6 +134,10 @@ namespace {
 }
 
 // ---------- drawing helpers ----------
+// CCDrawNode blends premultiplied, so every translucent colour goes through these
+static ccColor4F hc(float r, float g, float b, float a = 1.f) { return ccc4f(r * a, g * a, b * a, a); }
+static ccColor4F hcc(ccColor4F c, float a) { return hc(c.r, c.g, c.b, a); }
+
 static CCDrawNode* ckyRoundRect(float x, float y, float w, float h, float r,
                                 ccColor4F fill, float bw, ccColor4F border) {
     std::vector<CCPoint> v;
@@ -170,76 +183,82 @@ static CCPoint ckyP(float p[8][2], int i) { return { p[i][0], p[i][1] }; }
 
 // ---------- panels ----------
 // One pill-shaped panel for the current theme, lower-left corner (x, y). `edge` is the accent colour of the
-// state (normal / frozen / off). Returns nullptr when the theme has no panel (Matrix).
+// state (normal / frozen / off). Every theme has a panel; its fill follows the HUD opacity setting.
 static CCNode* ckyPanel(float x, float y, float w, float h, ccColor4F edge, uint32_t seed) {
     auto const& l = L();
+    float const a = hudA();      // fill opacity (the HUD opacity setting)
+    float const e = edgeA();     // outlines / decoration
     switch (kind()) {
-        case Kind::Matrix:
-            return nullptr;
+        case Kind::Matrix: {
+            // black terminal box (alpha = HUD opacity) with a hairline border in the state colour
+            auto d = CCDrawNode::create();
+            CCPoint v[4] = { { x, y }, { x + w, y }, { x + w, y + h }, { x, y + h } };
+            d->drawPolygon(v, 4, hc(0.f, 0.f, 0.f, a), l.border, hcc(edge, e));
+            return d;
+        }
 
         case Kind::Cyber: {
-            // 40% deep-blue glass, 0.7 pt chamfered cyan outline
+            // deep-blue glass, 0.7 pt chamfered cyan outline
             float c = std::min(l.radius, h * 0.18f);
             float p[8][2];
             fx::chamfer(x, y, x + w, y + h, c, p);
             CCPoint v[8];
             for (int i = 0; i < 8; ++i) v[i] = ckyP(p, i);
             auto d = CCDrawNode::create();
-            d->drawPolygon(v, 8, ccc4f(0.02f, 0.05f, 0.12f, 0.40f), l.border, ccc4f(edge.r, edge.g, edge.b, 0.85f));
+            d->drawPolygon(v, 8, hc(0.02f, 0.05f, 0.12f, a), l.border, hcc(edge, e));
             return d;
         }
 
         case Kind::Cat: {
-            // translucent glass: 50% pink-white, soft sheen on the top half, hairline peach border + white rim
+            // pink-white glass, soft sheen on the top half, hairline peach border + white rim
             auto n = CCNode::create();
-            n->addChild(ckyRoundRect(x, y, w, h, l.radius, ccc4f(1.f, 0.957f, 0.969f, 0.50f), l.border,
-                                     ccc4f(edge.r, edge.g, edge.b, 0.95f)));
+            n->addChild(ckyRoundRect(x, y, w, h, l.radius, hc(1.f, 0.957f, 0.969f, a), l.border, hcc(edge, e)));
             auto d = CCDrawNode::create();
-            ckyRect(d, x + l.radius * 0.7f, y + h * 0.52f, x + w - l.radius * 0.7f, y + h - 1.6f, ccc4f(1.f, 1.f, 1.f, 0.16f));
+            ckyRect(d, x + l.radius * 0.7f, y + h * 0.52f, x + w - l.radius * 0.7f, y + h - 1.6f, hc(1.f, 1.f, 1.f, 0.30f * a));
             n->addChild(d);
             n->addChild(ckyRoundRect(x + 1.3f, y + 1.3f, w - 2.6f, h - 2.6f, std::max(1.f, l.radius - 1.3f),
-                                     ccc4f(0.f, 0.f, 0.f, 0.f), 0.35f, ccc4f(1.f, 1.f, 1.f, 0.55f)));
+                                     hc(0.f, 0.f, 0.f, 0.f), 0.35f, hc(1.f, 1.f, 1.f, 0.55f * e)));
             return n;
         }
 
         case Kind::Lava: {
-            // 30% charcoal panel, glowing cracked-lava texture, cracked-obsidian border with lava in the gaps
+            // charcoal panel (alpha = HUD opacity), glowing cracked-lava texture, cracked-obsidian border with lava in the gaps
             float c = 7.f;
             float p[8][2];
             fx::chamfer(x, y, x + w, y + h, c, p);
             CCPoint v[8];
             for (int i = 0; i < 8; ++i) v[i] = ckyP(p, i);
             auto d = CCDrawNode::create();
-            d->drawPolygon(v, 8, ccc4f(0.11f, 0.063f, 0.047f, 0.30f), 0.f, ccc4f(0.f, 0.f, 0.f, 0.f));
+            d->drawPolygon(v, 8, hc(0.11f, 0.063f, 0.047f, a), 0.f, hc(0.f, 0.f, 0.f, 0.f));
 
             // heat rising from the bottom (stacked translucent bands = a cheap gradient)
             for (int k = 0; k < 4; ++k)
-                ckyRect(d, x + c, y, x + w - c, y + h * (0.12f + 0.09f * static_cast<float>(k)), ccc4f(1.f, 0.42f, 0.08f, 0.05f));
+                ckyRect(d, x + c, y, x + w - c, y + h * (0.12f + 0.09f * static_cast<float>(k)), hc(1.f, 0.42f, 0.08f, 0.05f * e));
 
             // cracks: soft glow underneath, bright core on top, a hot dot where cracks bend
             ccColor4F core = ccc4f(fx::lerp(edge.r, 1.f, 0.4f), fx::lerp(edge.g, 0.82f, 0.4f), fx::lerp(edge.b, 0.4f, 0.4f), 1.f);
             fx::crackNet(w, h, seed, 8.f, [&](float x0, float y0, float x1, float y1, bool br) {
-                d->drawSegment(ccp(x + x0, y + y0), ccp(x + x1, y + y1), br ? 1.1f : 1.7f, ccc4f(edge.r, edge.g, edge.b, 0.14f));
-                d->drawSegment(ccp(x + x0, y + y0), ccp(x + x1, y + y1), br ? 0.3f : 0.5f, ccc4f(core.r, core.g, core.b, br ? 0.55f : 0.85f));
-                if (!br) d->drawDot(ccp(x + x0, y + y0), 0.7f, ccc4f(core.r, core.g, core.b, 0.55f));
+                d->drawSegment(ccp(x + x0, y + y0), ccp(x + x1, y + y1), br ? 1.1f : 1.7f, hcc(edge, 0.14f * e));
+                d->drawSegment(ccp(x + x0, y + y0), ccp(x + x1, y + y1), br ? 0.3f : 0.5f, hcc(core, (br ? 0.55f : 0.85f) * e));
+                if (!br) d->drawDot(ccp(x + x0, y + y0), 0.7f, hcc(core, 0.55f * e));
             });
 
             // border: lava line underneath ...
             for (int i = 0; i < 8; ++i) {
-                CCPoint a = ckyP(p, i), b = ckyP(p, (i + 1) % 8);
-                d->drawSegment(a, b, 2.8f, ccc4f(edge.r, edge.g, edge.b, 0.12f));
-                d->drawSegment(a, b, 1.5f, ccc4f(edge.r, edge.g, edge.b, 0.60f));
-                d->drawSegment(a, b, 0.55f, ccc4f(core.r, core.g, core.b, 0.95f));
+                CCPoint pa = ckyP(p, i), pb = ckyP(p, (i + 1) % 8);
+                d->drawSegment(pa, pb, 2.8f, hcc(edge, 0.12f));
+                d->drawSegment(pa, pb, 1.5f, hcc(edge, 0.60f));
+                d->drawSegment(pa, pb, 0.55f, hcc(core, 0.95f));
             }
             // ... cracked obsidian pieces on top; the gaps between them are where the lava shows through
             for (int i = 0; i < 8; ++i) {
                 fx::brokenEdge(p[i][0], p[i][1], p[(i + 1) % 8][0], p[(i + 1) % 8][1], seed * 31u + static_cast<uint32_t>(i),
                                9.f, 24.f, 3.4f, 6.f, [&](float sx, float sy, float ex, float ey) {
-                    d->drawSegment(ccp(sx, sy), ccp(ex, ey), 1.15f, ccc4f(0.045f, 0.04f, 0.05f, 0.97f));
-                    d->drawSegment(ccp(sx, sy), ccp(ex, ey), 0.28f, ccc4f(0.38f, 0.33f, 0.44f, 0.55f));
+                    d->drawSegment(ccp(sx, sy), ccp(ex, ey), 1.15f, hc(0.045f, 0.04f, 0.05f, 0.97f));
+                    d->drawSegment(ccp(sx, sy), ccp(ex, ey), 0.28f, hc(0.38f, 0.33f, 0.44f, 0.55f));
                 });
             }
-            for (int i = 0; i < 8; ++i) d->drawDot(ckyP(p, i), 1.3f, ccc4f(0.045f, 0.04f, 0.05f, 0.97f));
+            for (int i = 0; i < 8; ++i) d->drawDot(ckyP(p, i), 1.3f, hc(0.045f, 0.04f, 0.05f, 0.97f));
             return d;
         }
 
@@ -252,14 +271,14 @@ static CCNode* ckyPanel(float x, float y, float w, float h, ccColor4F edge, uint
 static void ckyDisc(CCDrawNode* d, float D, ccColor4F ring) {
     float c = D / 2.f;
     switch (kind()) {
-        case Kind::Matrix:   // no solid disc: a thin ring over the gameplay
-            ckyCircle(d, { c, c }, c - 0.8f, ccc4f(0.f, 0.f, 0.f, 0.f), 0.6f, ring);
+        case Kind::Matrix:   // thin ring, the black panel is behind it
+            ckyCircle(d, { c, c }, c - 0.8f, hc(0.f, 0.f, 0.f, 0.f), 0.6f, ring);
             break;
         case Kind::Cyber:
-            ckyCircle(d, { c, c }, c - 0.8f, ccc4f(0.02f, 0.08f, 0.14f, 0.55f), 0.6f, ring);
+            ckyCircle(d, { c, c }, c - 0.8f, hc(0.02f, 0.08f, 0.14f, 0.40f + 0.60f * hudA()), 0.6f, ring);
             break;
         case Kind::Cat:
-            ckyCircle(d, { c, c }, c - 0.8f, ccc4f(1.f, 0.90f, 0.88f, 0.90f), 0.7f, ring);
+            ckyCircle(d, { c, c }, c - 0.8f, hc(1.f, 0.90f, 0.88f, 0.50f + 0.50f * hudA()), 0.7f, ring);
             break;
         default:
             d->drawDot({ c, c }, c - 1.f, ring);
@@ -382,6 +401,7 @@ static void ckyFitLabel(CCNode* parent, int tag, float baseScale, float maxW) {
 class CkyHud : public CCNode {
 public:
     int m_theme = 0;
+    float m_op = 0.f;               // the HUD opacity this HUD was drawn with (CCDrawNode can't change it afterwards)
     fx::EmberPool m_pool[2];        // Molten rocks only: one for each panel
     CCDrawNode*   m_em[2] = { nullptr, nullptr };
 
@@ -424,6 +444,7 @@ public:
         if (!CCNode::init()) return false;
         this->setID("cky-hud");
         m_theme = themeIdx();
+        m_op = hudA();
         auto win = CCDirector::get()->getWinSize();
         this->setPosition({ 0.f, 0.f });
 
@@ -518,8 +539,8 @@ public:
             if (!q.alive) continue;
             float a = fx::EmberPool::alphaOf(q);
             fx::Col col = fx::emberColor(q.age / q.life);
-            dn->drawDot(ccp(q.x, q.y), q.size * 2.2f, ccc4f(col.r, col.g, col.b, a * 0.16f));
-            dn->drawDot(ccp(q.x, q.y), q.size, ccc4f(col.r, col.g, col.b, a * 0.95f));
+            dn->drawDot(ccp(q.x, q.y), q.size * 2.2f, hc(col.r, col.g, col.b, a * 0.16f));
+            dn->drawDot(ccp(q.x, q.y), q.size, hc(col.r, col.g, col.b, a * 0.95f));
         }
     }
 
@@ -610,9 +631,9 @@ void ckyHudRefresh(CCNode* hud) {
     if (!hud) hud = ckyHudNode();
     if (!hud) return;
 
-    // menu theme changed -> rebuild the HUD in the new colours
+    // menu theme or HUD opacity changed -> rebuild the HUD (the panels are drawn shapes, so they are redrawn)
     if (auto h = typeinfo_cast<CkyHud*>(hud)) {
-        if (h->m_theme != themeIdx()) {
+        if (h->m_theme != themeIdx() || std::abs(h->m_op - hudA()) > 0.001f) {
             if (auto pl = PlayLayer::get()) { ckyBuildHud(pl); return; }
         }
     }
@@ -726,6 +747,10 @@ void ckyBuildHud(PlayLayer* pl) {
     pl->m_uiLayer->addChild(hud, 100);
     ckyScaleGroups(hud);
     ckyHudRefresh(hud);
+}
+
+$on_mod(Loaded) {
+    cky::hudOpacityLoad();
 }
 
 // END OF FILE (hud.cpp)

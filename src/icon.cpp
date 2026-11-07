@@ -1,6 +1,7 @@
 // icon.cpp — draggable round Cky button (0.5 opacity idle, 1.0 while held) (main menu + pause screen)
 // Matrix (.glitch): glitching wireframe sphere, flickers 1.0 <-> 0.2 while held.
 // Cyber  (.tech):   the round logo with a neon ring spinning around it (fast + 1.0 while held, slow + 0.5 idle).
+// Cat    (.meow):   a cat face with "Cat" inside instead of "Cky".   Molten rocks (.lava): a magma icon.
 #include "state.hpp"
 #include "icons.hpp"
 #include "fx.hpp"
@@ -103,8 +104,17 @@ class CkyIcon : public CCLayer {
             for (CCNode* c : { m_idle, m_held, m_dim, m_ghost }) this->addChild(c);
             this->scheduleUpdate();
         } else {
-            m_idle = ckyMakeLogo(RADIUS * 2.f, IDLE_ALPHA);    // CCDrawNode ignores node opacity, so the 0.5 look is its own copy
-            m_held = ckyMakeLogo(RADIUS * 2.f, 1.f);
+            // Cat: a cat face with "Cat" inside. Molten rocks: a magma icon. Every other theme (Cyber included) keeps the
+            // normal "Cky" logo. CCDrawNode ignores node opacity, so the 0.5 idle look is its own pre-built copy.
+            auto make = [&](float a) -> CCNode* {
+                switch (m_kind) {
+                    case cky::fx::Kind::Cat:  return ckyMakeCatLogo(RADIUS * 2.f, a);
+                    case cky::fx::Kind::Lava: return ckyMakeMagmaLogo(RADIUS * 2.f, a);
+                    default:                  return ckyMakeLogo(RADIUS * 2.f, a);
+                }
+            };
+            m_idle = make(IDLE_ALPHA);
+            m_held = make(1.f);
             m_idle->setPosition({ 0.f, 0.f });
             m_held->setPosition({ 0.f, 0.f });
             this->addChild(m_idle);

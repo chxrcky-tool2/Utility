@@ -271,7 +271,7 @@ namespace cky::fx {
     inline constexpr char kRainGlyphs[]  = "01<>/|=+*:";          // ImGui rain only (Cocos rain draws 0/1 shapes)
     inline constexpr char kBinOn[]  = "1 0 1";                    // Matrix toggle ON  (green)
     inline constexpr char kBinOff[] = "0 X 0";                    // Matrix toggle OFF (corrupted red)
-    inline constexpr float kRainAlpha = 0.2f;
+    inline constexpr float kRainAlpha = 0.14f;   // faint: the rain sits behind solid black and must never fight the text
 
     // ---- digital rain: columns of falling cells, head at the bottom of each trail. Coordinates: y UP. ----
     struct RainSim {

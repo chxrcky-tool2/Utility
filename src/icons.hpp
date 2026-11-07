@@ -88,6 +88,125 @@ inline CCNode* ckyMakeLogo(float d, float alpha = 1.f) {
     return container;
 }
 
+// ---- shared helpers for the themed round buttons below ----
+// Same trick as ckyMakeLogo: every shape is a polygon built from 64-sided circles, and the big fills do NOT
+// overlap, so `alpha` is applied to each colour (premultiplied, as CCDrawNode wants) and the idle 0.5 copy still
+// looks like the full one, just see-through.
+namespace cky_icons {
+    constexpr int   SEG = 64;
+    constexpr float TAU = 6.28318530718f;
+
+    inline ccColor4F pm(float r, float g, float b, float a, float alpha) {
+        a *= alpha;
+        return ccc4f(r * a, g * a, b * a, a);
+    }
+    inline CCPoint circlePt(float R, float rad, int i) {
+        float a = TAU * static_cast<float>(i) / SEG;
+        return CCPoint(R + std::cos(a) * rad, R + std::sin(a) * rad);
+    }
+    inline void disc(CCDrawNode* dn, float R, float rad, ccColor4F c) {
+        CCPoint v[SEG];
+        for (int i = 0; i < SEG; ++i) v[i] = circlePt(R, rad, i);
+        dn->drawPolygon(v, SEG, c, 0.f, c);
+    }
+    inline void band(CCDrawNode* dn, float R, float r0, float r1, ccColor4F c) {
+        for (int i = 0; i < SEG; ++i) {
+            CCPoint q[4] = { circlePt(R, r1, i), circlePt(R, r1, i + 1), circlePt(R, r0, i + 1), circlePt(R, r0, i) };
+            dn->drawPolygon(q, 4, c, 0.f, c);
+        }
+    }
+}
+
+// Cat theme button: a round peach-pink cat face with two ears, whiskers and the word "Cat" inside
+// (the other themes show "Cky"). Same size / hit area as the Cky logo.
+inline CCNode* ckyMakeCatLogo(float d, float alpha = 1.f) {
+    using namespace cky_icons;
+    auto container = CCNode::create();
+    container->setContentSize({d, d});
+    container->setAnchorPoint({0.5f, 0.5f});
+
+    float R = d / 2.f;
+    auto dn = CCDrawNode::create();
+    auto P = [&](float r, float g, float b, float a = 1.f) { return pm(r, g, b, a, alpha); };
+    auto ang = [&](float deg, float rad) {          // point at an angle on a circle around the centre
+        float a = deg * 3.14159265f / 180.f;
+        return CCPoint(R + std::cos(a) * rad, R + std::sin(a) * rad);
+    };
+
+    // ears: two triangles each (tip -> two base points on the outer ring, split at the middle of the arc), so the
+    // ears never overlap the ring and the see-through copy has no darker spots
+    ccColor4F ear = P(1.f, 0.62f, 0.60f);
+    for (float side : { 1.f, -1.f }) {
+        float mid = side > 0.f ? 55.f : 125.f;      // right ear / left ear, measured from the +x axis
+        CCPoint a = ang(mid - 17.f, R), m = ang(mid, R), b = ang(mid + 17.f, R);
+        CCPoint tip = ang(mid + side * -2.f, R * 1.42f);
+        CCPoint t1[3] = { a, tip, m };
+        CCPoint t2[3] = { b, tip, m };
+        dn->drawPolygon(t1, 3, ear, 0.f, ear);
+        dn->drawPolygon(t2, 3, ear, 0.f, ear);
+    }
+
+    band(dn, R, R - 2.2f, R, P(1.f, 0.62f, 0.60f));       // peach ring
+    disc(dn, R, R - 2.2f, P(1.f, 0.94f, 0.95f));          // near-white pink face
+
+    // whiskers (3 per side) and blush
+    ccColor4F wh = P(0.86f, 0.52f, 0.60f, 0.9f);
+    for (float side : { 1.f, -1.f }) {
+        float x0 = R + side * R * 0.58f, x1 = R + side * R * 0.96f;
+        dn->drawSegment({ x0, R - R * 0.10f }, { x1, R - R * 0.02f }, 0.45f, wh);
+        dn->drawSegment({ x0, R - R * 0.20f }, { x1, R - R * 0.22f }, 0.45f, wh);
+        dn->drawSegment({ x0, R - R * 0.30f }, { x1, R - R * 0.42f }, 0.45f, wh);
+    }
+    container->addChild(dn);
+
+    // "Cat" (dark rose on the light face = high contrast), scaled to fit inside the face
+    auto lbl = CCLabelBMFont::create("Cat", "bigFont.fnt");
+    lbl->setScale(1.f);
+    float w = std::max(1.f, lbl->getContentSize().width);
+    lbl->setScale(std::min(0.5f, d * 0.60f / w));
+    lbl->setColor(ccc3(120, 36, 64));
+    lbl->setOpacity(static_cast<GLubyte>(std::clamp(alpha, 0.f, 1.f) * 255.f));
+    lbl->setPosition({ R, R + R * 0.10f });
+    container->addChild(lbl, 1);
+    return container;
+}
+
+// Molten rocks theme button: a magma icon. Obsidian disc, glowing cracks that fan out from a molten core, hot
+// heated-metal ring. No text. Same size / hit area as the Cky logo.
+inline CCNode* ckyMakeMagmaLogo(float d, float alpha = 1.f) {
+    using namespace cky_icons;
+    auto container = CCNode::create();
+    container->setContentSize({d, d});
+    container->setAnchorPoint({0.5f, 0.5f});
+
+    float R = d / 2.f;
+    auto dn = CCDrawNode::create();
+    auto P = [&](float r, float g, float b, float a = 1.f) { return pm(r, g, b, a, alpha); };
+
+    band(dn, R, R - 1.8f, R, P(1.f, 0.50f, 0.10f));        // glowing hot rim
+    band(dn, R, R - 3.4f, R - 1.8f, P(0.05f, 0.03f, 0.03f)); // obsidian inner rim
+    disc(dn, R, R - 3.4f, P(0.12f, 0.06f, 0.05f));          // basalt face
+
+    // cracks in unit coordinates (centre = 0,0, all inside 0.9): a soft glow underneath, a hot core on top
+    struct Seg { float x0, y0, x1, y1; };
+    static constexpr Seg cracks[] = {
+        { 0.00f,  0.00f,  0.25f,  0.30f }, { 0.25f,  0.30f,  0.20f,  0.62f }, { 0.20f,  0.62f,  0.45f,  0.82f },
+        { 0.00f,  0.00f, -0.30f,  0.18f }, {-0.30f,  0.18f, -0.62f,  0.22f }, {-0.62f,  0.22f, -0.84f,  0.45f },
+        { 0.00f,  0.00f, -0.12f, -0.38f }, {-0.12f, -0.38f, -0.40f, -0.58f }, {-0.40f, -0.58f, -0.46f, -0.82f },
+        { 0.00f,  0.00f,  0.40f, -0.20f }, { 0.40f, -0.20f,  0.70f, -0.28f }, { 0.70f, -0.28f,  0.86f, -0.55f },
+        { 0.25f,  0.30f,  0.55f,  0.34f }, {-0.62f,  0.22f, -0.70f, -0.05f }, {-0.12f, -0.38f,  0.12f, -0.66f },
+    };
+    float s = R - 5.f;
+    for (auto const& c : cracks)
+        dn->drawSegment({ R + c.x0 * s, R + c.y0 * s }, { R + c.x1 * s, R + c.y1 * s }, 1.9f, P(1.f, 0.38f, 0.06f, 0.30f));
+    for (auto const& c : cracks)
+        dn->drawSegment({ R + c.x0 * s, R + c.y0 * s }, { R + c.x1 * s, R + c.y1 * s }, 0.75f, P(1.f, 0.82f, 0.30f, 1.f));
+    dn->drawDot({ R, R }, s * 0.30f, P(1.f, 0.42f, 0.06f, 0.55f));     // molten core
+    dn->drawDot({ R, R }, s * 0.17f, P(1.f, 0.90f, 0.45f, 1.f));
+    container->addChild(dn);
+    return container;
+}
+
 // Clock icon (speedhack). Child tag 91 = ON (cyan), tag 92 = OFF (grey)
 inline CCNode* ckyClockIcon(float s) {
     auto n = CCNode::create();
