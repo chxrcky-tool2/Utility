@@ -161,7 +161,7 @@ static void ckyCircle(CCDrawNode* d, CCPoint c, float r, ccColor4F fill, float b
     CCPoint v[28];
     for (int i = 0; i < 28; ++i) {
         float a = 6.2831853f * static_cast<float>(i) / 28.f;
-        v[i] = { c.x + std::cos(a) * r, c.y + std::sin(a) * r };
+        v[i] = CCPoint(c.x + std::cos(a) * r, c.y + std::sin(a) * r);
     }
     d->drawPolygon(v, 28, fill, bw, border);
 }
