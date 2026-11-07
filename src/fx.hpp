@@ -143,15 +143,21 @@ namespace cky::fx {
     };
 
     // ---- embers (Lava): tiny, rise from the bottom edge ----
+    // cap / rate / lifeScale default to the original look (16 alive, ~9 per second). The ImGui menu and the
+    // in-level HUD raise them to get more embers; the array is a fixed 64, nothing is ever allocated.
     struct EmberPool {
-        static constexpr int N = 16;
+        static constexpr int N = 64;
         Particle p[N];
         float acc = 0.f;
+        int   cap = 16;            // how many may be alive at once (<= N)
+        float rate = 9.f;          // embers spawned per second
+        float lifeScale = 1.f;     // multiplies the life time
 
         void clear() { for (auto& q : p) q.alive = false; acc = 0.f; }
         int  alive() const { int n = 0; for (auto const& q : p) n += q.alive ? 1 : 0; return n; }
 
         void step(float dt, float unit, Rect const& b) {
+            int const lim = std::clamp(cap, 1, N);
             for (auto& q : p) {
                 if (!q.alive) continue;
                 q.age += dt;
@@ -159,11 +165,11 @@ namespace cky::fx {
                 q.x += (q.vx + std::sin(q.age * 5.f + q.phase) * 9.f * unit) * dt;
                 if (q.age >= q.life || !inside(b, q.x, q.y, q.size)) q.alive = false;
             }
-            acc += dt * 9.f;                                  // ~9 embers per second
+            acc += dt * rate;
             while (acc >= 1.f) {
                 acc -= 1.f;
                 Particle* s = nullptr;
-                for (auto& q : p) if (!q.alive) { s = &q; break; }
+                for (int i = 0; i < lim; ++i) if (!p[i].alive) { s = &p[i]; break; }
                 if (!s) { acc = 0.f; break; }
                 s->size = rf(1.1f, 2.4f) * unit;
                 s->x = rf(b.x0 + s->size + 2.f, b.x1 - s->size - 2.f);
@@ -171,7 +177,7 @@ namespace cky::fx {
                 s->vx = rf(-6.f, 6.f) * unit;
                 s->vy = rf(26.f, 58.f) * unit;
                 s->age = 0.f;
-                s->life = rf(1.6f, 3.2f);
+                s->life = rf(1.6f, 3.2f) * lifeScale;
                 s->phase = rf(0.f, 6.28f);
                 s->alive = true;
             }
@@ -191,6 +197,73 @@ namespace cky::fx {
     inline uint32_t hash32(uint32_t a, uint32_t b) {
         a ^= b * 0x9E3779B1u; a ^= a >> 15; a *= 0x85EBCA77u; a ^= a >> 13; a *= 0xC2B2AE3Du; a ^= a >> 16;
         return a;
+    }
+
+    // ---- Molten rocks: lava cracks + broken obsidian border (shared by the HUD and the ImGui menu) ----
+    // crackNet: a deterministic network of lava cracks inside a w x h rectangle. Local coordinates, y UP.
+    // Calls f(x0, y0, x1, y1, isBranch) once per segment. Same seed = same cracks every frame, so nothing is
+    // stored. Cost is flat: at most 14 cracks x 7 segments (+ a few short branches). density scales the count.
+    template <class F>
+    inline void crackNet(float w, float h, uint32_t seed, float density, F&& f) {
+        if (w < 12.f || h < 12.f) return;
+        int mains = std::clamp(static_cast<int>(w * h / 19600.f * density + 0.5f), 2, 14);
+        float seg = std::clamp(std::min(w, h) * 0.2f, 7.f, 30.f);
+        int steps = std::clamp(static_cast<int>(std::max(w, h) / seg * 0.6f), 3, 7);
+        for (int i = 0; i < mains; ++i) {
+            uint32_t s = hash32(seed, static_cast<uint32_t>(i) * 977u + 13u);
+            auto r = [&s](float a, float b) {
+                s = hash32(s, 0x51EDu);
+                return a + (b - a) * static_cast<float>(s & 0xFFFFu) / 65535.f;
+            };
+            float x, y, ang, side = r(0.f, 1.f);
+            if (side < 0.62f)      { x = r(0.04f, 0.96f) * w; y = 0.f; ang = 1.5708f + r(-0.7f, 0.7f); }   // from the bottom edge
+            else if (side < 0.81f) { x = 0.f; y = r(0.f, 0.7f) * h;    ang = r(-0.5f, 0.5f); }             // from the left edge
+            else                   { x = w;   y = r(0.f, 0.7f) * h;    ang = 3.14159f + r(-0.5f, 0.5f); }  // from the right edge
+            for (int k = 0; k < steps; ++k) {
+                ang += r(-0.75f, 0.75f);
+                float len = seg * r(0.7f, 1.3f);
+                float nx = x + std::cos(ang) * len, ny = y + std::sin(ang) * len;
+                float t = 1.f;
+                if (nx < 0.f) t = std::min(t, (0.f - x) / (nx - x));
+                if (nx > w)   t = std::min(t, (w - x) / (nx - x));
+                if (ny < 0.f) t = std::min(t, (0.f - y) / (ny - y));
+                if (ny > h)   t = std::min(t, (h - y) / (ny - y));
+                if (t <= 0.02f) break;
+                bool stop = t < 1.f;
+                if (stop) { nx = x + (nx - x) * t; ny = y + (ny - y) * t; }
+                f(x, y, nx, ny, false);
+                if (!stop && r(0.f, 1.f) < 0.32f) {
+                    float ba = ang + (r(0.f, 1.f) < 0.5f ? -1.f : 1.f) * r(0.6f, 1.1f);
+                    float bl = seg * r(0.5f, 1.f);
+                    float bx = nx + std::cos(ba) * bl, by = ny + std::sin(ba) * bl;
+                    if (bx >= 0.f && bx <= w && by >= 0.f && by <= h) f(nx, ny, bx, by, true);
+                }
+                if (stop) break;
+                x = nx; y = ny;
+            }
+        }
+    }
+
+    // brokenEdge: splits the edge (x0,y0)-(x1,y1) into pieces of random length with small random gaps between
+    // them. Draw the pieces dark (obsidian) over a glowing line and the gaps show lava glowing through.
+    // Calls f(sx, sy, ex, ey) per piece. Deterministic per seed.
+    template <class F>
+    inline void brokenEdge(float x0, float y0, float x1, float y1, uint32_t seed,
+                           float minLen, float maxLen, float minGap, float maxGap, F&& f) {
+        float dx = x1 - x0, dy = y1 - y0;
+        float L = std::sqrt(dx * dx + dy * dy);
+        if (L < 1e-3f) return;
+        uint32_t s = hash32(seed, 0xB0DEu);
+        auto r = [&s](float a, float b) {
+            s = hash32(s, 0x7A11u);
+            return a + (b - a) * static_cast<float>(s & 0xFFFFu) / 65535.f;
+        };
+        float pos = 0.f;
+        for (int guard = 0; pos < L && guard < 400; ++guard) {
+            float e = std::min(L, pos + r(minLen, maxLen));
+            f(x0 + dx * pos / L, y0 + dy * pos / L, x0 + dx * e / L, y0 + dy * e / L);
+            pos = e + r(minGap, maxGap);
+        }
     }
 
     // characters the GD font (bigFont.fnt) and the ImGui default font both have

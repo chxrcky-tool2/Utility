@@ -50,6 +50,45 @@ namespace {
         return U(lerpf(0.85f, 1.00f, t), lerpf(0.20f, 0.62f, t), lerpf(0.05f, 0.14f, t), a);
     }
 
+    // Drop shadow behind every piece of text in the menu window (legibility over the gameplay now that the panels
+    // are see-through). It copies the window's glyph triangles (the ones that are not the white pixel) into the
+    // BACKGROUND draw list, shifted by `off` px and tinted. So it sits behind the widgets, clipped to the window,
+    // and costs one buffer reserve + a copy of the text triangles. Nothing is allocated outside ImGui's own lists.
+    void fxTextShadow(ImVec2 wp, ImVec2 ws, ImU32 rgb, float alphaMul, float off) {
+        ImDrawList* src = ImGui::GetWindowDrawList();
+        ImDrawList* bg = ImGui::GetBackgroundDrawList();
+        ImVec2 white = ImGui::GetFontTexUvWhitePixel();
+        ImDrawVert const* vtx = src->VtxBuffer.Data;
+        ImDrawIdx const* idx = src->IdxBuffer.Data;
+        int const n = src->IdxBuffer.Size;
+        if (!vtx || !idx) return;
+        auto isText = [&](ImDrawIdx i) { return vtx[i].uv.x != white.x || vtx[i].uv.y != white.y; };
+        int cnt = 0;
+        for (int i = 0; i + 2 < n; i += 3) if (isText(idx[i])) cnt += 3;
+        if (cnt == 0) return;
+        bg->PushClipRect(wp, ImVec2(wp.x + ws.x, wp.y + ws.y), true);
+        bg->PrimReserve(cnt, cnt);
+        ImU32 const base = rgb & 0x00FFFFFFu;
+        for (int i = 0; i + 2 < n; i += 3) {
+            if (!isText(idx[i])) continue;
+            for (int k = 0; k < 3; ++k) {
+                ImDrawVert const& v = vtx[idx[i + k]];
+                ImU32 a = static_cast<ImU32>(static_cast<float>((v.col >> 24) & 0xFFu) * alphaMul);
+                bg->PrimWriteVtx(ImVec2(v.pos.x + off, v.pos.y + off), v.uv, base | (std::min<ImU32>(a, 255u) << 24));
+            }
+        }
+        bg->PopClipRect();
+    }
+    void fxTextShadowForTheme(ImVec2 wp, ImVec2 ws) {
+        switch (curKind()) {
+            case Kind::Matrix: fxTextShadow(wp, ws, IM_COL32(0, 0, 0, 255), 1.0f, 1.4f); break;
+            case Kind::Cyber:  fxTextShadow(wp, ws, IM_COL32(0, 5, 15, 255), 0.9f, 1.0f); break;
+            case Kind::Lava:   fxTextShadow(wp, ws, IM_COL32(0, 0, 0, 255), 0.9f, 1.2f); break;
+            case Kind::Cat:    fxTextShadow(wp, ws, IM_COL32(255, 255, 255, 255), 0.7f, 1.0f); break;
+            default: break;
+        }
+    }
+
     fx::PawPool   g_paws;
     fx::EmberPool g_embers;
     Kind          g_lastKind = Kind::None;
@@ -60,7 +99,7 @@ namespace {
     // All state is fixed-size (RainSim) or kept in ImGui's own state storage; nothing is allocated.
     fx::RainSim g_rain;
     float g_laserY = -1e9f;                                // screen y of the Cyber laser this frame (widgets light up near it)
-    constexpr float RAIN_UNIT = 15.f;                      // ImGui px per rain cell
+    constexpr float RAIN_UNIT = 13.f;                      // ImGui px per rain cell
 
     // label text where, now and then, one character swaps to a red or white symbol for a split second (Matrix)
     void mxLabel(ImDrawList* dl, ImVec2 pos, ImU32 col, char const* s, char const* end, ImGuiID id) {
@@ -80,10 +119,10 @@ namespace {
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
         float th = ImGui::GetFrameHeight();
-        bg->AddRectFilled(wp, wmax, U(0.f, 0.f, 0.f, 1.f));                              // pure black
-        bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.16f, 0.06f, 1.f));     // title bar
+        // No solid boxes at all: just a thin green rule under the title. The text gets a drop shadow (fxTextShadow).
+        bg->AddLine(ImVec2(wp.x, wp.y + th + 0.5f), ImVec2(wmax.x, wp.y + th + 0.5f), U(0.f, 0.9f, 0.3f, 0.75f), 1.f);
 
-        // digital rain, 0.2 opacity, clipped to the window below the title bar
+        // digital rain (a little dimmer than before so it never fights the text), clipped below the title bar
         float areaTop = wp.y + th, areaH = ws.y - th;
         fx::Rect box{ 0.f, 0.f, ws.x, areaH };                                            // local, y up
         g_rain.step(dt, RAIN_UNIT, box);
@@ -95,7 +134,7 @@ namespace {
             for (int k = 0; k < fx::RainSim::TRAIL; ++k) {
                 float y = g_rain.c[i].head + static_cast<float>(k) * RAIN_UNIT;
                 if (y < 0.f || y > areaH) continue;
-                float a = fx::RainSim::cellAlpha(k) * fx::kRainAlpha;
+                float a = fx::RainSim::cellAlpha(k) * fx::kRainAlpha * 0.75f;
                 ImU32 col = k == 0 ? U(0.75f, 1.f, 0.8f, a) : U(0.f, 1.f, 0.35f, a);
                 char const* gl = &fx::kRainGlyphs[g_rain.glyph(i, k) % (sizeof(fx::kRainGlyphs) - 1)];
                 bg->AddText(font, fs, ImVec2(x, areaTop + (areaH - y) - fs * 0.5f), col, gl, gl + 1);
@@ -103,11 +142,11 @@ namespace {
         }
         bg->PopClipRect();
 
-        // green border; once in a while it tears for one frame (red ghost, shoved sideways)
-        bg->AddRect(wp, wmax, U(0.f, 0.9f, 0.3f, 1.f), 0.f, 0, 2.f);
+        // hairline green border; once in a while it tears for one frame (red ghost, shoved sideways)
+        bg->AddRect(ImVec2(wp.x + 0.5f, wp.y + 0.5f), ImVec2(wmax.x - 0.5f, wmax.y - 0.5f), U(0.f, 0.9f, 0.3f, 0.8f), 0.f, 0, 1.f);
         if (fx::rnd() % 90 == 0)
             bg->AddRect(ImVec2(wp.x + fx::rf(-5.f, 5.f), wp.y + fx::rf(-3.f, 3.f)),
-                        ImVec2(wmax.x + fx::rf(-5.f, 5.f), wmax.y), U(1.f, 0.15f, 0.15f, 0.8f), 0.f, 0, 2.f);
+                        ImVec2(wmax.x + fx::rf(-5.f, 5.f), wmax.y), U(1.f, 0.15f, 0.15f, 0.7f), 0.f, 0, 1.f);
     }
 
     void cyBegin(ImVec2 wp, ImVec2 ws) {
@@ -115,39 +154,41 @@ namespace {
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
         float th = ImGui::GetFrameHeight();
-        // deep dark blue -> near black
-        bg->AddRectFilledMultiColor(wp, wmax, U(0.02f, 0.05f, 0.12f), U(0.02f, 0.05f, 0.12f), U(0.f, 0.01f, 0.04f), U(0.f, 0.01f, 0.04f));
-        bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.14f, 0.22f, 1.f));
-        bg->AddLine(ImVec2(wp.x, wp.y + th), ImVec2(wmax.x, wp.y + th), U(0.f, 0.9f, 1.f, 0.8f), 1.5f);
+        // 40% opacity glass: deep dark blue -> near black, so the gameplay shows through
+        bg->AddRectFilledMultiColor(wp, wmax, U(0.02f, 0.05f, 0.12f, 0.40f), U(0.02f, 0.05f, 0.12f, 0.40f),
+                                    U(0.f, 0.01f, 0.04f, 0.40f), U(0.f, 0.01f, 0.04f, 0.40f));
+        bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.14f, 0.22f, 0.50f));
+        bg->AddLine(ImVec2(wp.x, wp.y + th + 0.5f), ImVec2(wmax.x, wp.y + th + 0.5f), U(0.f, 0.9f, 1.f, 0.70f), 1.f);
 
-        // subtle glowing grid (slow brightness breathing), clipped under the title bar
+        // subtle glowing grid (slow brightness breathing), thin lines, clipped under the title bar
         float glow = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 1.6f);
-        constexpr float CELL = 30.f;
+        constexpr float CELL = 28.f;
         float gx0 = wp.x, gy0 = wp.y + th;
         bg->PushClipRect(ImVec2(gx0, gy0), wmax, true);
         int ix = 0;
         for (float x = gx0 + CELL; x < wmax.x; x += CELL, ++ix) {
             bool major = (ix % 4) == 3;
-            bg->AddLine(ImVec2(x, gy0), ImVec2(x, wmax.y), U(0.f, 0.85f, 1.f, (major ? 0.15f : 0.065f) * glow), major ? 1.5f : 1.f);
+            bg->AddLine(ImVec2(x, gy0), ImVec2(x, wmax.y), U(0.f, 0.85f, 1.f, (major ? 0.10f : 0.045f) * glow), major ? 1.f : 0.7f);
         }
         int iy = 0;
         for (float y = gy0 + CELL; y < wmax.y; y += CELL, ++iy) {
             bool major = (iy % 4) == 3;
-            bg->AddLine(ImVec2(gx0, y), ImVec2(wmax.x, y), U(0.f, 0.85f, 1.f, (major ? 0.15f : 0.065f) * glow), major ? 1.5f : 1.f);
+            bg->AddLine(ImVec2(gx0, y), ImVec2(wmax.x, y), U(0.f, 0.85f, 1.f, (major ? 0.10f : 0.045f) * glow), major ? 1.f : 0.7f);
         }
         ix = 0;
         for (float x = gx0 + CELL; x < wmax.x; x += CELL, ++ix) {
             if ((ix % 4) != 3) continue;
             iy = 0;
             for (float y = gy0 + CELL; y < wmax.y; y += CELL, ++iy)
-                if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 2.2f, U(0.f, 0.9f, 1.f, 0.22f * glow), 8);   // glowing intersections
+                if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 1.6f, U(0.f, 0.9f, 1.f, 0.18f * glow), 8);   // glowing intersections
         }
         bg->PopClipRect();
 
-        // neon border with a soft pulsing halo
+        // hairline neon border: a faint 3 px halo that pulses + a crisp 1 px outline
         float pulse = fx::pulse01(now, 0.6f);
-        bg->AddRect(wp, wmax, U(0.f, 0.9f, 1.f, 0.10f + 0.10f * pulse), 0.f, 0, 8.f);
-        bg->AddRect(wp, wmax, U(0.f, 0.95f, 1.f, 0.95f), 0.f, 0, 2.f);
+        ImVec2 a(wp.x + 0.5f, wp.y + 0.5f), b(wmax.x - 0.5f, wmax.y - 0.5f);
+        bg->AddRect(a, b, U(0.f, 0.9f, 1.f, 0.04f + 0.05f * pulse), 0.f, 0, 3.f);
+        bg->AddRect(a, b, U(0.f, 0.95f, 1.f, 0.90f), 0.f, 0, 1.f);
 
         // laser height this frame; fxEnd draws it, fxButton / the toggles read it to light up
         g_laserY = gy0 + (ws.y - th - 4.f) * fx::scanPos(now);
@@ -170,24 +211,27 @@ namespace {
         float rounding = ImGui::GetStyle().WindowRounding;
 
         if (k == Kind::Cat) {
-            // little ears on the top corners
+            // little ears on the top corners (they start exactly at the top edge so the glass shows no overlap)
             float e = std::min(ws.x, 900.f) * 0.035f + 12.f;
-            ImU32 ear = U(fx::kPeach), earIn = U(1.f, 0.86f, 0.88f);
-            bg->AddTriangleFilled(ImVec2(wp.x + rounding * 0.5f, wp.y + 4.f), ImVec2(wp.x + rounding * 0.5f + e * 0.2f, wp.y - e),
-                                  ImVec2(wp.x + rounding * 0.5f + e * 1.5f, wp.y + 4.f), ear);
-            bg->AddTriangleFilled(ImVec2(wp.x + ws.x - rounding * 0.5f, wp.y + 4.f), ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.2f, wp.y - e),
-                                  ImVec2(wp.x + ws.x - rounding * 0.5f - e * 1.5f, wp.y + 4.f), ear);
-            bg->AddTriangleFilled(ImVec2(wp.x + rounding * 0.5f + e * 0.25f, wp.y + 2.f), ImVec2(wp.x + rounding * 0.5f + e * 0.28f, wp.y - e * 0.6f),
-                                  ImVec2(wp.x + rounding * 0.5f + e * 0.95f, wp.y + 2.f), earIn);
-            bg->AddTriangleFilled(ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.25f, wp.y + 2.f), ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.28f, wp.y - e * 0.6f),
-                                  ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.95f, wp.y + 2.f), earIn);
+            ImU32 ear = U(fx::kPeach, 0.85f), earIn = U(1.f, 0.86f, 0.88f, 0.85f);
+            bg->AddTriangleFilled(ImVec2(wp.x + rounding * 0.5f, wp.y + 1.f), ImVec2(wp.x + rounding * 0.5f + e * 0.2f, wp.y - e),
+                                  ImVec2(wp.x + rounding * 0.5f + e * 1.5f, wp.y + 1.f), ear);
+            bg->AddTriangleFilled(ImVec2(wp.x + ws.x - rounding * 0.5f, wp.y + 1.f), ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.2f, wp.y - e),
+                                  ImVec2(wp.x + ws.x - rounding * 0.5f - e * 1.5f, wp.y + 1.f), ear);
+            bg->AddTriangleFilled(ImVec2(wp.x + rounding * 0.5f + e * 0.25f, wp.y + 1.f), ImVec2(wp.x + rounding * 0.5f + e * 0.28f, wp.y - e * 0.6f),
+                                  ImVec2(wp.x + rounding * 0.5f + e * 0.95f, wp.y + 1.f), earIn);
+            bg->AddTriangleFilled(ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.25f, wp.y + 1.f), ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.28f, wp.y - e * 0.6f),
+                                  ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.95f, wp.y + 1.f), earIn);
 
-            bg->AddRectFilled(wp, wmax, U(fx::kPinkWhite), rounding);             // near-white pink body
+            // translucent glass body: 50% near-white pink + a soft sheen over the top third
+            bg->AddRectFilled(wp, wmax, U(fx::kPinkWhite, 0.50f), rounding);
+            bg->AddRectFilledMultiColor(ImVec2(wp.x + rounding * 0.5f, wp.y + 2.f), ImVec2(wmax.x - rounding * 0.5f, wp.y + ws.y * 0.35f),
+                                        U(1.f, 1.f, 1.f, 0.22f), U(1.f, 1.f, 1.f, 0.22f), U(1.f, 1.f, 1.f, 0.f), U(1.f, 1.f, 1.f, 0.f));
 
-            // scattered background paws: 0.4 opacity, different sizes, clipped to the window
+            // scattered background paws (a touch fainter on the glass), clipped to the window
             bg->PushClipRect(wp, wmax, true);
             float sc = std::clamp(ws.y / 270.f, 1.f, 3.f);
-            ImU32 pawCol = U(fx::kPeach, fx::kBgPawAlpha);
+            ImU32 pawCol = U(fx::kPeach, fx::kBgPawAlpha * 0.8f);
             for (auto const& b : fx::kBgPaws) {
                 float s2 = b.size * sc;
                 float ex = fx::pawExtent(s2) + 4.f;
@@ -196,7 +240,11 @@ namespace {
                 imPaw(bg, wp.x + x, wp.y + ws.y - y, s2, b.rotDeg * 3.14159265f / 180.f, pawCol);
             }
             bg->PopClipRect();
-            bg->AddRect(wp, wmax, U(fx::kPeach), rounding, 0, 3.f);
+
+            // thin lines instead of the old thick border: a hairline peach edge + a white glass rim just inside
+            bg->AddRect(wp, wmax, U(fx::kPeach, 0.95f), rounding, 0, 1.2f);
+            bg->AddRect(ImVec2(wp.x + 2.f, wp.y + 2.f), ImVec2(wmax.x - 2.f, wmax.y - 2.f), U(1.f, 1.f, 1.f, 0.50f),
+                        std::max(0.f, rounding - 2.f), 0, 1.f);
 
             // click anywhere inside the menu -> a small paw floats up and fades
             if (ImGui::IsMouseClicked(0)) {
@@ -206,18 +254,37 @@ namespace {
             }
             g_paws.step(dt, PAW_UNIT, box);
         } else {
-            // ---- Molten rocks: chamfered window, heated-metal border, rising embers ----
+            // ---- Molten rocks: 30% chamfered panel, glowing cracked-lava texture, cracked-obsidian border, embers ----
             float c = std::clamp(ws.y * 0.04f, 12.f, 26.f);
             float th = ImGui::GetFrameHeight();
+            float pulse = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 2.2f);
             ImVec2 body[8];
             imChamfer(wp.x, wp.y, wmax.x, wmax.y, c, body);
-            bg->AddConvexPolyFilled(body, 8, U(0.11f, 0.063f, 0.047f, 0.97f));
+            bg->AddConvexPolyFilled(body, 8, U(0.11f, 0.063f, 0.047f, 0.30f));
             auto const& lo = cky::kThemeDefs[std::clamp(cky::theme, 0, cky::ThemeCount - 1)].lo;
             ImVec2 bar[6] = { ImVec2(wp.x + c, wp.y), ImVec2(wmax.x - c, wp.y), ImVec2(wmax.x, wp.y + c),
                               ImVec2(wmax.x, wp.y + th), ImVec2(wp.x, wp.y + th), ImVec2(wp.x, wp.y + c) };
-            bg->AddConvexPolyFilled(bar, 6, U(lo[0], lo[1], lo[2], 1.f));
+            bg->AddConvexPolyFilled(bar, 6, U(lo[0], lo[1], lo[2], 0.60f));
 
-            // embers (behind the widgets, clipped to the window)
+            bg->PushClipRect(ImVec2(wp.x, wp.y + th), wmax, true);
+            // heat glowing up from the bottom of the window
+            float gh = ws.y * 0.24f;
+            bg->AddRectFilledMultiColor(ImVec2(wp.x + c, wmax.y - gh), ImVec2(wmax.x - c, wmax.y),
+                U(1.f, 0.40f, 0.07f, 0.f), U(1.f, 0.40f, 0.07f, 0.f),
+                U(1.f, 0.40f, 0.07f, 0.20f * pulse), U(1.f, 0.40f, 0.07f, 0.20f * pulse));
+
+            // cracked lava texture: a soft wide glow, an orange mid line and a hot yellow core per crack segment
+            fx::crackNet(ws.x, ws.y, 0xC0FFEEu, 0.45f, [&](float x0, float y0, float x1, float y1, bool br) {
+                ImVec2 a(wp.x + x0, wmax.y - y0), b(wp.x + x1, wmax.y - y1);
+                bg->AddLine(a, b, U(1.f, 0.42f, 0.08f, 0.10f * pulse), br ? 5.f : 8.f);
+                bg->AddLine(a, b, U(1.f, 0.52f, 0.12f, 0.38f * pulse), br ? 1.6f : 2.4f);
+                bg->AddLine(a, b, U(1.f, 0.84f, 0.42f, br ? 0.55f : 0.85f), br ? 0.7f : 1.1f);
+                if (!br) bg->AddCircleFilled(a, 2.6f, U(1.f, 0.62f, 0.2f, 0.45f * pulse), 8);   // hot spot where a crack bends
+            });
+            bg->PopClipRect();
+
+            // embers: more of them, rising from the bottom (behind the widgets, clipped to the window)
+            g_embers.cap = 48; g_embers.rate = 26.f; g_embers.lifeScale = 1.5f;
             g_embers.step(dt, EMBER_UNIT, box);
             bg->PushClipRect(wp, wmax, true);
             for (auto const& q : g_embers.p) {
@@ -225,32 +292,30 @@ namespace {
                 float a = fx::EmberPool::alphaOf(q);
                 fx::Col col = fx::emberColor(q.age / q.life);
                 ImVec2 pos(wp.x + q.x, wmax.y - q.y);
-                if (q.size > 3.4f) bg->AddCircleFilled(pos, q.size * 2.2f, U(col, a * 0.18f), 8);   // soft glow
+                bg->AddCircleFilled(pos, q.size * 2.4f, U(col, a * 0.16f), 8);   // soft glow
                 bg->AddCircleFilled(pos, q.size, U(col, a), 6);
             }
             bg->PopClipRect();
 
-            // glowing border: layered strokes, colour by height, slow pulse. ~40 line calls.
-            float pulse = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 2.2f);
+            // border: a lava line underneath, cracked obsidian pieces on top. The gaps between the pieces
+            // are where the lava glows through. ~8 edges x (3 + a few pieces x 2) line calls.
             ImVec2 p[8];
-            imChamfer(wp.x + 2.f, wp.y + 2.f, wmax.x - 2.f, wmax.y - 2.f, c, p);
-            auto stroke = [&](float width, float alpha) {
-                for (int i = 0; i < 8; ++i) {
-                    ImVec2 a = p[i], b = p[(i + 1) % 8];
-                    int n = std::max(1, static_cast<int>(std::ceil(std::fabs(b.y - a.y) / 60.f)));
-                    for (int j = 0; j < n; ++j) {
-                        ImVec2 s0(lerpf(a.x, b.x, float(j) / n), lerpf(a.y, b.y, float(j) / n));
-                        ImVec2 s1(lerpf(a.x, b.x, float(j + 1) / n), lerpf(a.y, b.y, float(j + 1) / n));
-                        float t = std::clamp(((s0.y + s1.y) * 0.5f - wp.y) / ws.y, 0.f, 1.f);
-                        bg->AddLine(s0, s1, heatAt(t, alpha), width);
-                    }
-                    float t = std::clamp((b.y - wp.y) / ws.y, 0.f, 1.f);
-                    bg->AddCircleFilled(b, width * 0.5f, heatAt(t, alpha), 8);     // closes the corner joints
-                }
-            };
-            stroke(9.f, 0.16f * pulse);
-            stroke(5.f, 0.38f * pulse);
-            stroke(2.5f, 0.95f);
+            imChamfer(wp.x + 1.5f, wp.y + 1.5f, wmax.x - 1.5f, wmax.y - 1.5f, c, p);
+            for (int i = 0; i < 8; ++i) {
+                ImVec2 a = p[i], b = p[(i + 1) % 8];
+                bg->AddLine(a, b, U(1.f, 0.42f, 0.08f, 0.16f * pulse), 9.f);
+                bg->AddLine(a, b, U(1.f, 0.50f, 0.10f, 0.60f * pulse), 4.f);
+                bg->AddLine(a, b, U(1.f, 0.80f, 0.35f, 0.95f), 1.6f);
+            }
+            for (int i = 0; i < 8; ++i) {
+                ImVec2 a = p[i], b = p[(i + 1) % 8];
+                fx::brokenEdge(a.x, a.y, b.x, b.y, 0x0B51D1u + static_cast<uint32_t>(i) * 7919u, 26.f, 78.f, 3.f, 7.f,
+                    [&](float sx, float sy, float ex, float ey) {
+                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.045f, 0.04f, 0.05f, 0.97f), 4.6f);   // obsidian
+                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.34f, 0.30f, 0.40f, 0.55f), 0.9f);    // glassy sheen
+                    });
+            }
+            for (int i = 0; i < 8; ++i) bg->AddCircleFilled(p[i], 2.4f, U(0.045f, 0.04f, 0.05f, 0.97f), 8);
         }
     }
 
@@ -262,12 +327,12 @@ namespace {
             ImDrawList* fg = ImGui::GetForegroundDrawList();
             ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
             fg->PushClipRect(ImVec2(wp.x, wp.y + ImGui::GetFrameHeight()), wmax, true);
-            float y = g_laserY, band = 26.f;
+            float y = g_laserY, band = 18.f;
             fg->AddRectFilledMultiColor(ImVec2(wp.x, y - band), ImVec2(wmax.x, y),
-                U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.16f));
+                U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.10f), U(0.f, 1.f, 1.f, 0.10f));
             fg->AddRectFilledMultiColor(ImVec2(wp.x, y), ImVec2(wmax.x, y + band),
-                U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
-            fg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.95f), 2.f);
+                U(0.f, 1.f, 1.f, 0.10f), U(0.f, 1.f, 1.f, 0.10f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
+            fg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.85f), 1.2f);
             fg->PopClipRect();
             return;
         }
@@ -311,34 +376,34 @@ namespace {
             ImVec2 h(sz.x * 0.5f * s, sz.y * 0.5f * s);
             float r = st.FrameRounding + 4.f;
             dl->AddRectFilled(ImVec2(c.x - h.x, c.y - h.y), ImVec2(c.x + h.x, c.y + h.y), fill, r);
-            dl->AddRect(ImVec2(c.x - h.x, c.y - h.y), ImVec2(c.x + h.x, c.y + h.y), U(1.f, 0.62f, 0.60f, 0.9f), r, 0, 2.f);
+            dl->AddRect(ImVec2(c.x - h.x, c.y - h.y), ImVec2(c.x + h.x, c.y + h.y), U(1.f, 0.62f, 0.60f, 0.9f), r, 0, 1.2f);
             dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * s,
                         ImVec2(c.x - ts.x * 0.5f * s, c.y - ts.y * 0.5f * s), txt, label, end);
         } else if (k == Kind::Cyber) {
             // chamfered sci-fi corners + glowing cyan outline; brighter while the laser passes over it
             float li = fx::laserHit(c.y, g_laserY, sz.y * 1.2f);
             ImVec2 pts[8];
-            imChamfer(p.x, p.y, p.x + sz.x, p.y + sz.y, sz.y * 0.28f, pts);
-            dl->AddConvexPolyFilled(pts, 8, act ? U(0.f, 0.35f, 0.5f) : hov ? U(0.f, 0.22f, 0.34f) : U(0.01f, 0.08f, 0.15f));
-            if (li > 0.f) dl->AddConvexPolyFilled(pts, 8, U(0.f, 1.f, 1.f, 0.18f * li));
-            dl->AddPolyline(pts, 8, U(0.f, 0.9f, 1.f, 0.16f + 0.16f * li + (hov || act ? 0.12f : 0.f)), ImDrawFlags_Closed, 6.f);   // glow
-            dl->AddPolyline(pts, 8, U(lerpf(0.f, 0.7f, li), 0.95f, 1.f, hov || act ? 1.f : 0.88f), ImDrawFlags_Closed, 2.f);        // outline
+            imChamfer(p.x, p.y, p.x + sz.x, p.y + sz.y, sz.y * 0.20f, pts);
+            dl->AddConvexPolyFilled(pts, 8, act ? U(0.f, 0.35f, 0.5f, 0.75f) : hov ? U(0.f, 0.22f, 0.34f, 0.65f) : U(0.01f, 0.08f, 0.15f, 0.50f));
+            if (li > 0.f) dl->AddConvexPolyFilled(pts, 8, U(0.f, 1.f, 1.f, 0.14f * li));
+            dl->AddPolyline(pts, 8, U(0.f, 0.9f, 1.f, 0.08f + 0.10f * li + (hov || act ? 0.08f : 0.f)), ImDrawFlags_Closed, 3.f);   // faint glow
+            dl->AddPolyline(pts, 8, U(lerpf(0.f, 0.7f, li), 0.95f, 1.f, hov || act ? 1.f : 0.88f), ImDrawFlags_Closed, hov || act ? 1.5f : 1.1f);   // thin outline
             dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(0.82f, 1.f, 1.f), label, end);
         } else if (k == Kind::Matrix) {
-            // flat black + green border. While hovered / pressed the border violently glitches: new random shoves,
-            // a red and a white ghost, every frame (65% of frames), so it looks like it tears for a frame at a time
+            // no box: only a faint green wash while hovered / pressed + a hairline green border. While hovered the
+            // border glitches: new random shoves, a red and a white ghost (65% of frames), like it tears for a frame
             ImVec2 a(p.x, p.y), b(p.x + sz.x, p.y + sz.y);
-            dl->AddRectFilled(a, b, hov || act ? U(0.f, 0.16f, 0.06f) : U(0.f, 0.f, 0.f));
-            ImU32 green = U(0.f, 0.95f, 0.35f);
+            if (hov || act) dl->AddRectFilled(a, b, U(0.f, 0.20f, 0.07f, 0.55f));
+            ImU32 green = U(0.f, 0.95f, 0.35f, 0.80f);
             if ((hov || act) && fx::rnd() % 100 < 65u) {
                 int n = 2 + static_cast<int>(fx::rnd() % 2u);
                 for (int j = 0; j < n; ++j) {
                     float dx = fx::rf(-5.f, 5.f), dy = fx::rf(-3.f, 3.f);
                     ImU32 col = j == 0 ? U(1.f, 0.15f, 0.15f, 0.9f) : j == 1 ? U(1.f, 1.f, 1.f, 0.8f) : green;
-                    dl->AddRect(ImVec2(a.x + dx, a.y + dy), ImVec2(b.x + dx, b.y + dy), col, 0.f, 0, 1.5f);
+                    dl->AddRect(ImVec2(a.x + dx, a.y + dy), ImVec2(b.x + dx, b.y + dy), col, 0.f, 0, 1.2f);
                 }
             } else {
-                dl->AddRect(a, b, green, 0.f, 0, 1.5f);
+                dl->AddRect(a, b, green, 0.f, 0, 1.f);
             }
             mxLabel(dl, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(0.78f, 1.f, 0.82f), label, end, id);
         } else {
@@ -387,8 +452,8 @@ namespace {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 a(p.x, p.y), b(p.x + bw, p.y + bh);
         ImU32 col = scrolling ? U(0.78f, 1.f, 0.82f) : *v ? U(0.f, 1.f, 0.31f) : U(1.f, 0.2f, 0.2f);
-        dl->AddRectFilled(a, b, *v ? U(0.f, 0.20f, 0.05f) : U(0.24f, 0.f, 0.f));
-        dl->AddRect(a, b, *v ? U(0.f, 0.95f, 0.3f, hov ? 1.f : 0.85f) : U(1.f, 0.2f, 0.2f, hov ? 1.f : 0.85f), 0.f, 0, hov ? 2.5f : 1.5f);
+        dl->AddRectFilled(a, b, *v ? U(0.f, 0.20f, 0.05f, 0.30f) : U(0.24f, 0.f, 0.f, 0.30f));
+        dl->AddRect(a, b, *v ? U(0.f, 0.95f, 0.3f, hov ? 1.f : 0.85f) : U(1.f, 0.2f, 0.2f, hov ? 1.f : 0.85f), 0.f, 0, hov ? 1.8f : 1.1f);
         ImVec2 tp(a.x + (bw - bin.x) * 0.5f, a.y + (bh - bin.y) * 0.5f);
         dl->AddText(tp, col, shown);
         if (!*v) {                                                       // OFF is "corrupted": rare one-frame white tear + torn strip
@@ -407,7 +472,7 @@ namespace {
     // OFF = dark grey, no glow, knob left. The label is bright cyan ON / dark grey OFF and fades in on change.
     bool cyToggle(char const* label, bool* v) {
         ImGuiStyle& st = ImGui::GetStyle();
-        float bs = ImGui::GetFrameHeight(), tw = bs * 1.8f;
+        float bs = ImGui::GetFrameHeight(), tw = bs * 1.65f;
         ImVec2 ts = ImGui::CalcTextSize(label, nullptr, true);
         ImVec2 p = ImGui::GetCursorScreenPos();
         ImGuiID id = ImGui::GetID(label);
@@ -426,19 +491,19 @@ namespace {
         float li = fx::laserHit(cy, g_laserY, bs * 1.2f);
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 hx[6] = { ImVec2(x0 + c, y0), ImVec2(x1 - c, y0), ImVec2(x1, cy), ImVec2(x1 - c, y1), ImVec2(x0 + c, y1), ImVec2(x0, cy) };
-        dl->AddConvexPolyFilled(hx, 6, U(lerpf(0.07f, 0.f, a), lerpf(0.08f, 0.16f, a), lerpf(0.10f, 0.22f, a)));
+        dl->AddConvexPolyFilled(hx, 6, U(lerpf(0.07f, 0.f, a), lerpf(0.08f, 0.16f, a), lerpf(0.10f, 0.22f, a), 0.70f));
         if (a > 0.02f) {
-            dl->AddPolyline(hx, 6, U(0.f, 0.95f, 1.f, (0.18f + 0.22f * pulse) * a), ImDrawFlags_Closed, bs * 0.36f);   // soft outer glow
+            dl->AddPolyline(hx, 6, U(0.f, 0.95f, 1.f, (0.10f + 0.14f * pulse) * a), ImDrawFlags_Closed, bs * 0.16f);   // faint outer glow
             ImVec2 in[6];
             for (int i = 0; i < 6; ++i) in[i] = ImVec2(lerpf(hx[i].x, (x0 + x1) * 0.5f, 0.28f), lerpf(hx[i].y, cy, 0.28f));
-            dl->AddConvexPolyFilled(in, 6, U(0.f, 0.9f, 1.f, (0.10f + 0.12f * pulse) * a));                           // inner glow
+            dl->AddConvexPolyFilled(in, 6, U(0.f, 0.9f, 1.f, (0.07f + 0.09f * pulse) * a));                           // inner glow
         }
-        dl->AddPolyline(hx, 6, U(lerpf(0.22f, 0.f, a), lerpf(0.25f, 0.95f, a), lerpf(0.30f, 1.f, a)), ImDrawFlags_Closed, hov ? 3.f : 2.f);
-        float kx = lerpf(x0 + bs * 0.55f, x1 - bs * 0.55f, a), kr = bs * 0.26f;
+        dl->AddPolyline(hx, 6, U(lerpf(0.22f, 0.f, a), lerpf(0.25f, 0.95f, a), lerpf(0.30f, 1.f, a)), ImDrawFlags_Closed, hov ? 1.8f : 1.2f);
+        float kx = lerpf(x0 + bs * 0.55f, x1 - bs * 0.55f, a), kr = bs * 0.24f;
         ImVec2 kn[6] = { ImVec2(kx - kr * 0.6f, cy - kr), ImVec2(kx + kr * 0.6f, cy - kr), ImVec2(kx + kr, cy),
                          ImVec2(kx + kr * 0.6f, cy + kr), ImVec2(kx - kr * 0.6f, cy + kr), ImVec2(kx - kr, cy) };
         dl->AddConvexPolyFilled(kn, 6, U(lerpf(0.25f, 0.65f, a), lerpf(0.27f, 1.f, a), lerpf(0.31f, 1.f, a)));
-        if (li > 0.f) dl->AddPolyline(hx, 6, U(0.6f, 1.f, 1.f, 0.8f * li), ImDrawFlags_Closed, 2.5f);                  // laser highlight
+        if (li > 0.f) dl->AddPolyline(hx, 6, U(0.6f, 1.f, 1.f, 0.8f * li), ImDrawFlags_Closed, 1.5f);                  // laser highlight
         if (ts.x > 0.f) {
             char const* end = std::strstr(label, "##");
             ImU32 tc = U(lerpf(0.30f, 0.f, a), lerpf(0.34f, 0.94f, a), lerpf(0.40f, 1.f, a));
@@ -478,10 +543,10 @@ namespace {
             dl->AddTriangleFilled(ImVec2(x1 - bs * .08f, y0 + 2.f), ImVec2(x1 - bs * .12f, y0 - bs * .34f), ImVec2(x1 - bs * .42f, y0 + 2.f), ear);
             dl->AddTriangleFilled(ImVec2(x0 + bs * .16f, y0 + 1.f), ImVec2(x0 + bs * .17f, y0 - bs * .20f), ImVec2(x0 + bs * .34f, y0 + 1.f), earIn);
             dl->AddTriangleFilled(ImVec2(x1 - bs * .16f, y0 + 1.f), ImVec2(x1 - bs * .17f, y0 - bs * .20f), ImVec2(x1 - bs * .34f, y0 + 1.f), earIn);
-            ImU32 face = U(lerpf(1.f, 1.f, a), lerpf(0.94f, 0.84f, a), lerpf(0.95f, 0.78f, a));
+            ImU32 face = U(lerpf(1.f, 1.f, a), lerpf(0.94f, 0.84f, a), lerpf(0.95f, 0.78f, a), 0.80f);
             float r = bs * 0.30f;
             dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), face, r);
-            dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), U(1.f, hov ? 0.58f : 0.66f, hov ? 0.56f : 0.60f), r, 0, hov ? 3.f : 2.f);
+            dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), U(1.f, hov ? 0.58f : 0.66f, hov ? 0.56f : 0.60f), r, 0, hov ? 1.8f : 1.2f);
             if (a > 0.02f) {
                 float pop = a * (1.f + 0.35f * std::sin(a * 3.14159f));   // overshoots, then settles
                 imPaw(dl, cx, cy + bs * 0.03f, bs * 0.30f * pop, 0.f, U(fx::kPeachDeep, std::min(1.f, a * 1.3f)));
@@ -546,6 +611,14 @@ namespace {
         fx::Kind k = fx::kindOf(t);
         auto& st = ImGui::GetStyle();
         float wr = 14.f, fr = 9.f;
+        // base spacing (the original look); the four floating themes below tighten it
+        st.FramePadding = ImVec2(14.f, 10.f);
+        st.ItemSpacing = ImVec2(12.f, 12.f);
+        st.ItemInnerSpacing = ImVec2(5.6f, 5.6f);
+        st.WindowPadding = ImVec2(11.2f, 11.2f);
+        st.GrabMinSize = 30.f;
+        st.ScrollbarSize = 26.f;
+        st.WindowBorderSize = 2.f;
         if (k == fx::Kind::Cat) {
             wr = 20.f; fr = 12.f;
             c[ImGuiCol_Text]          = ImVec4(0.55f, 0.27f, 0.34f, 1.f);
@@ -643,6 +716,61 @@ namespace {
             c[ImGuiCol_Separator]     = ImVec4(0.f, 0.45f, 0.55f, 1.f);
             c[ImGuiCol_ScrollbarBg]   = ImVec4(0.f, 0.02f, 0.05f, 0.6f);
             c[ImGuiCol_ScrollbarGrab] = ImVec4(0.f, 0.50f, 0.60f, 1.f);
+        }
+        // ---- the four floating themes: see-through widgets (so the gameplay stays visible), thin lines, tight padding ----
+        auto fade = [&](int idx, float a) { c[idx].w *= a; };
+        if (k == fx::Kind::Cat) {
+            wr = 16.f; fr = 10.f;
+            st.FramePadding = ImVec2(11.f, 7.f);
+            st.ItemSpacing = ImVec2(10.f, 9.f);
+            st.WindowPadding = ImVec2(11.f, 9.f);
+            st.GrabMinSize = 26.f;
+            st.ScrollbarSize = 22.f;
+            st.WindowBorderSize = 1.f;
+            fade(ImGuiCol_TitleBg, 0.55f); fade(ImGuiCol_TitleBgActive, 0.60f); fade(ImGuiCol_TitleBgCollapsed, 0.60f);
+            fade(ImGuiCol_FrameBg, 0.55f); fade(ImGuiCol_FrameBgHovered, 0.62f); fade(ImGuiCol_FrameBgActive, 0.72f);
+            fade(ImGuiCol_Button, 0.75f); fade(ImGuiCol_ButtonHovered, 0.82f); fade(ImGuiCol_ButtonActive, 0.90f);
+            fade(ImGuiCol_Header, 0.70f); fade(ImGuiCol_HeaderHovered, 0.80f); fade(ImGuiCol_HeaderActive, 0.90f);
+            fade(ImGuiCol_Tab, 0.50f); fade(ImGuiCol_TabHovered, 0.75f); fade(ImGuiCol_TabActive, 0.75f);
+            fade(ImGuiCol_ScrollbarBg, 0.40f);
+        } else if (k == fx::Kind::Lava) {
+            // 30% panels: window colour matches the body fxBegin draws; widgets stay readable but see-through
+            c[ImGuiCol_WindowBg].w = 0.30f;
+            fade(ImGuiCol_TitleBgCollapsed, 0.70f);
+            fade(ImGuiCol_FrameBg, 0.65f); fade(ImGuiCol_FrameBgHovered, 0.72f); fade(ImGuiCol_FrameBgActive, 0.80f);
+            fade(ImGuiCol_Button, 0.78f); fade(ImGuiCol_ButtonHovered, 0.85f); fade(ImGuiCol_ButtonActive, 0.92f);
+            fade(ImGuiCol_Header, 0.70f); fade(ImGuiCol_HeaderHovered, 0.80f); fade(ImGuiCol_HeaderActive, 0.90f);
+            fade(ImGuiCol_Tab, 0.60f); fade(ImGuiCol_TabHovered, 0.80f); fade(ImGuiCol_TabActive, 0.80f);
+            fade(ImGuiCol_ScrollbarBg, 0.40f);
+        } else if (k == fx::Kind::Cyber) {
+            st.FramePadding = ImVec2(9.f, 5.5f);
+            st.ItemSpacing = ImVec2(9.f, 7.f);
+            st.ItemInnerSpacing = ImVec2(5.f, 4.5f);
+            st.WindowPadding = ImVec2(9.f, 8.f);
+            st.GrabMinSize = 24.f;
+            st.ScrollbarSize = 20.f;
+            st.WindowBorderSize = 1.f;
+            c[ImGuiCol_WindowBg].w = 0.40f;
+            fade(ImGuiCol_TitleBgCollapsed, 0.60f);
+            fade(ImGuiCol_FrameBg, 0.55f); fade(ImGuiCol_FrameBgHovered, 0.65f); fade(ImGuiCol_FrameBgActive, 0.75f);
+            fade(ImGuiCol_Button, 0.55f); fade(ImGuiCol_ButtonHovered, 0.70f); fade(ImGuiCol_ButtonActive, 0.80f);
+            fade(ImGuiCol_Tab, 0.45f); fade(ImGuiCol_TabHovered, 0.70f); fade(ImGuiCol_TabActive, 0.70f);
+            fade(ImGuiCol_ScrollbarBg, 0.40f);
+        } else if (k == fx::Kind::Matrix) {
+            // no solid boxes: transparent window / title / buttons / tabs, widgets only a faint green tint
+            st.FramePadding = ImVec2(8.f, 4.5f);
+            st.ItemSpacing = ImVec2(8.f, 6.f);
+            st.ItemInnerSpacing = ImVec2(5.f, 4.f);
+            st.WindowPadding = ImVec2(9.f, 7.f);
+            st.GrabMinSize = 22.f;
+            st.ScrollbarSize = 18.f;
+            st.WindowBorderSize = 1.f;
+            c[ImGuiCol_WindowBg].w = 0.f;
+            c[ImGuiCol_TitleBgCollapsed].w = 0.f;
+            fade(ImGuiCol_FrameBg, 0.35f); fade(ImGuiCol_FrameBgHovered, 0.45f); fade(ImGuiCol_FrameBgActive, 0.55f);
+            c[ImGuiCol_Button].w = 0.f; fade(ImGuiCol_ButtonHovered, 0.50f); fade(ImGuiCol_ButtonActive, 0.65f);
+            c[ImGuiCol_Tab].w = 0.f; fade(ImGuiCol_TabHovered, 0.50f); fade(ImGuiCol_TabActive, 0.60f);
+            c[ImGuiCol_ScrollbarBg].w = 0.f;
         }
         st.WindowRounding = wr;
         st.FrameRounding = st.GrabRounding = st.TabRounding = st.ChildRounding = fr;
@@ -1012,6 +1140,7 @@ namespace {
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();
             }
+            fxTextShadowForTheme(fxPos, fxSize);   // drop shadow behind the text (Matrix / Cyber / Cat / Molten rocks)
             fxEnd(fxPos, fxSize);
         }
         ImGui::End();
