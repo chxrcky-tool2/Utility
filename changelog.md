@@ -3,6 +3,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 
 ## [1.0.5]
 ### Added
+- **HUD opacity setting:** adjusts the in-level HUD panels (10-100%, default 75%) in every theme. Cocos: Display tab, row below "HUD size". ImGui: Display section. It never changes the menus.
+- **Themed floating button:** Cat shows a cat face with "Cat" inside instead of "Cky", Molten rocks shows a magma icon. Cyber (and every other theme) keeps the normal button.
+- **Matrix HUD:** now a solid black box with a thin green border (its fill follows the HUD opacity).
 - **Cat theme animations (.meow):** near-white pink look with peach pink accents. Click/tap anywhere in the menu spawns a small paw print that floats up and fades (max 8 alive, clipped to the menu, so it never renders outside). 13 static background paws at 0.4 opacity in different sizes (drawn once in Cocos). Springy button bounce, cat-ear toggle box that pops a paw in. Works in both the Cocos panel and the ImGui menu.
 - **Molten rocks theme (.lava):** sharp chamfered (hexagonal) corners on windows, buttons and toggle boxes, glowing orange heated-metal gradient border, and tiny rising embers from the bottom of the window (max 16 alive, 30 Hz in Cocos). Cocos toggle is a magma box with an orange check. Works in both the Cocos panel and the ImGui menu.
 - **Cky button:** now a true circle (64-sided polygons), 0.5 opacity while idle and 1.0 the instant it is touched.
@@ -28,6 +31,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 - **Removed the .cky format.** The macro format is now chosen by the theme (Settings of the mod). Old `.cky` files in `game/macros` still load.
 
 ### Fixed
+- **Menus are fully opaque again:** the Cocos panel and the ImGui menu are solid (1.0 opacity) in every theme, Cat, Cyber, Matrix and Molten rocks included, so they no longer blend into the level or let the main-menu buttons show through the text. Only the in-level HUD can be see-through.
+- **Readable text in the decorated themes:** Molten rocks text is pure white / bright yellow, Matrix boxes and toggles are solid black behind the green text, the Cyber laser is drawn behind the text and its grid is dimmer, Cat text is a darker rose, and bright hover / selected fills no longer swallow light labels.
+- **HUD panels fade correctly:** the HUD drew translucent shapes with the wrong blend colours (light panels washed out to white). Fixed.
 - **Back step:** it now works right after pausing. While playing, a few light "anchor" snapshots are kept per second (no TPS lag), so Back jumps to the last one; after that, stepping forward makes exact one-frame back steps again.
 - **TPS slowdown:** The rewind buffer while playing is now off by default (it copied the whole level state every step and capped real TPS), and it is skipped above 240 TPS. 
 
