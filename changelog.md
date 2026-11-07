@@ -3,7 +3,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 
 ## [1.0.5]
 ### Added
-- **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step. (untested)
+- **Practice fixes:** the full player state (dash, slope, buffered jump, collision, velocity, ...) is saved with every practice checkpoint and every back-step anchor and re-applied after the game loads it, because the game's own checkpoint only restores part of it. Toggle: Bot tab (Cocos) / Bot section (ImGui).
+- **Desync log:** the first-desync and sync-check log lines now also show the game's own time-based frame next to our step counter.
+- **Hitbox trail:** Leaves the player's outer and inner hitboxes behind at every physics step. Adjustable length and RGB + opacity colors for both boxes, in the Cocos menu (Display tab, gear next to the toggle) and in ImGui. Rewinds with the back step.
 - **ImGui User Interface:** Complete UI overhaul with a toggleable ImGui framework alongside the native Cocos UI for zero-lag playback.
 - **Theme Engine:** Added multiple UI themes including Mono, Forest, Neon, and Sunset, plus Cat, Vintage, Sky, Lavender and Rose. Ocean got a richer aqua-to-deep-blue palette.
 - **Cky Icon:** Added a customizable, draggable bot icon with adjustable sizing.
@@ -19,7 +21,9 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 
 ### Fixed
 - **Back step:** it now works right after pausing. While playing, a few light "anchor" snapshots are kept per second (no TPS lag), so Back jumps to the last one; after that, stepping forward makes exact one-frame back steps again.
-- **TPS slowdown:** The rewind buffer while playing is now off by default (it copied the whole level state every step and capped real TPS), and it is skipped above 240 TPS. (untested)
+- **TPS slowdown:** The rewind buffer while playing is now off by default (it copied the whole level state every step and capped real TPS), and it is skipped above 240 TPS. 
+
+I don't even know how to make TPS faster
 
 ## [1.0.4]
 ### Added
