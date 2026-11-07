@@ -7,11 +7,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include "themes.hpp"
 
 namespace cky::fx {
-    enum class Kind { None, Cat, Lava };
+    enum class Kind { None, Cat, Lava, Matrix, Cyber };
 
     // the theme index is found by its macro extension, so reordering themes.hpp never breaks this
     inline int indexOfExt(char const* ext) {
@@ -21,8 +22,12 @@ namespace cky::fx {
     inline Kind kindOf(int theme) {
         static int const cat = indexOfExt(".meow");
         static int const lava = indexOfExt(".lava");
+        static int const matrix = indexOfExt(".glitch");
+        static int const cyber = indexOfExt(".tech");
         if (theme == cat) return Kind::Cat;
         if (theme == lava) return Kind::Lava;
+        if (theme == matrix) return Kind::Matrix;
+        if (theme == cyber) return Kind::Cyber;
         return Kind::None;
     }
 
@@ -176,6 +181,123 @@ namespace cky::fx {
             return clamp01(t * 10.f) * (1.f - t);
         }
     };
+
+
+    // =====================================================================================================
+    // Matrix (.glitch) + Cyber (.tech): pure maths, no Cocos / ImGui calls (panel.cpp, imgui_ui.cpp and
+    // icon.cpp only draw). Everything is fixed-size: RainSim is 24 columns x 7 cells, there are no
+    // allocations, no vectors, no heap use per frame, so nothing can leak and the cost stays flat.
+    // =====================================================================================================
+    inline uint32_t hash32(uint32_t a, uint32_t b) {
+        a ^= b * 0x9E3779B1u; a ^= a >> 15; a *= 0x85EBCA77u; a ^= a >> 13; a *= 0xC2B2AE3Du; a ^= a >> 16;
+        return a;
+    }
+
+    // characters the GD font (bigFont.fnt) and the ImGui default font both have
+    inline constexpr char kScrambleSet[] = "01X#%&@$?/=+*";
+    inline constexpr char kRainGlyphs[]  = "01<>/|=+*:";          // ImGui rain only (Cocos rain draws 0/1 shapes)
+    inline constexpr char kBinOn[]  = "1 0 1";                    // Matrix toggle ON  (green)
+    inline constexpr char kBinOff[] = "0 X 0";                    // Matrix toggle OFF (corrupted red)
+    inline constexpr float kRainAlpha = 0.2f;
+
+    // ---- digital rain: columns of falling cells, head at the bottom of each trail. Coordinates: y UP. ----
+    struct RainSim {
+        static constexpr int MAXC = 24, TRAIL = 7;
+        struct Col { float head = 0.f, speed = 0.f; uint32_t seed = 0; };
+        Col c[MAXC];
+        int n = 0;
+        bool ready = false;
+        float epochT = 0.f;
+        uint32_t epoch = 0;
+
+        void clear() { ready = false; }
+
+        // unit = height of one cell in px. Columns never get closer than 1.3 cells.
+        void step(float dt, float unit, Rect const& b) {
+            float w = b.x1 - b.x0, h = b.y1 - b.y0;
+            if (w < unit * 2.f || h < unit * 2.f) { n = 0; return; }
+            n = std::clamp(static_cast<int>(w / (unit * 1.3f)), 1, MAXC);
+            if (!ready) {
+                for (int i = 0; i < MAXC; ++i) {
+                    c[i].head = rf(b.y0, b.y1 + unit * TRAIL);
+                    c[i].speed = rf(4.f, 10.f);
+                    c[i].seed = rnd();
+                }
+                ready = true;
+            }
+            epochT += dt;
+            while (epochT >= 0.12f) { epochT -= 0.12f; ++epoch; }
+            for (int i = 0; i < n; ++i) {
+                c[i].head -= c[i].speed * unit * dt;
+                if (c[i].head < b.y0 - unit) {                       // fell out of the bottom: restart above the top
+                    c[i].head = b.y1 + rf(0.f, unit * TRAIL);
+                    c[i].speed = rf(4.f, 10.f);
+                    c[i].seed = rnd();
+                }
+            }
+        }
+        float colX(int i, Rect const& b) const { return b.x0 + (static_cast<float>(i) + 0.5f) * (b.x1 - b.x0) / static_cast<float>(n); }
+        // cell k of a column sits k cells above the head. k = 0 is the bright head.
+        static float cellAlpha(int k) { return k == 0 ? 1.f : 0.8f * (1.f - static_cast<float>(k) / TRAIL); }
+        // glyph id of a cell; every cell flips at its own phase (the head flips fastest)
+        uint32_t glyph(int col, int k) const {
+            uint32_t phase = hash32(c[col].seed, static_cast<uint32_t>(k)) % 6u;
+            uint32_t e = k == 0 ? epoch : (epoch + phase) / 6u;
+            return hash32(c[col].seed + static_cast<uint32_t>(k) * 7919u, e);
+        }
+        bool bit(int col, int k) const { return ((glyph(col, k) >> 7) & 1u) != 0; }
+    };
+
+    // ---- text glitch (Matrix) ----
+    // Should this label have one character swapped right now? Decided per label id in 1/12 s buckets, so a
+    // label is glitched for ~0.08 s and, with oneIn = 110, roughly 2 labels per second glitch across a menu.
+    struct Glitch { bool on = false; int idx = 0; char ch = '#'; bool red = false; };
+    inline Glitch glitchFor(uint32_t id, double time, size_t len, uint32_t oneIn = 110) {
+        Glitch g;
+        if (len == 0) return g;
+        uint32_t h = hash32(id, static_cast<uint32_t>(time * 12.0));
+        if (h % oneIn != 0) return g;
+        g.on = true;
+        g.idx = static_cast<int>((h >> 8) % len);
+        g.ch = kScrambleSet[(h >> 12) % (sizeof(kScrambleSet) - 1)];
+        g.red = ((h >> 20) & 1u) != 0;
+        return g;
+    }
+
+    // Matrix toggle click: random characters scroll past, then lock in one by one (left to right).
+    // t = seconds since the click. Writes the text to show into out; returns true once every char is locked.
+    inline bool scramble(char const* target, float t, uint32_t epoch, char* out, size_t cap) {
+        size_t len = std::strlen(target);
+        if (len + 1 > cap) len = cap - 1;
+        bool done = true;
+        for (size_t i = 0; i < len; ++i) {
+            char ch = target[i];
+            if (ch == ' ') { out[i] = ' '; continue; }
+            if (t >= 0.12f + 0.09f * static_cast<float>(i)) { out[i] = ch; continue; }
+            done = false;
+            out[i] = kScrambleSet[hash32(epoch, static_cast<uint32_t>(i) + 1u) % (sizeof(kScrambleSet) - 1)];
+        }
+        out[len] = 0;
+        return done;
+    }
+
+    // ---- Cyber ----
+    // laser position 0..1..0 (slow, eased at both ends). period = seconds for one way.
+    inline float scanPos(double t, float period = 3.8f) {
+        float u = static_cast<float>(std::fmod(t / static_cast<double>(period), 2.0));
+        if (u > 1.f) u = 2.f - u;
+        return u * u * (3.f - 2.f * u);
+    }
+    // 1 right under the laser, falling to 0 at `band` px away
+    inline float laserHit(float y, float laserY, float band) { return clamp01(1.f - std::fabs(y - laserY) / band); }
+    inline float pulse01(double t, float hz) { return 0.5f + 0.5f * static_cast<float>(std::sin(6.28318530718 * hz * t)); }
+
+    // elongated hexagon (the Cyber switch), 6 points, y up, counter-clockwise from bottom-left
+    inline void hexagon(float x0, float y0, float x1, float y1, float c, float (&out)[6][2]) {
+        float cy = (y0 + y1) * 0.5f;
+        float pts[6][2] = { { x0 + c, y0 }, { x1 - c, y0 }, { x1, cy }, { x1 - c, y1 }, { x0 + c, y1 }, { x0, cy } };
+        std::memcpy(out, pts, sizeof(pts));
+    }
 
     // chamfered ("hexagonal") corner polygon, 8 points, y up, counter-clockwise from bottom-left chamfer
     inline void chamfer(float x0, float y0, float x1, float y1, float c, float (&out)[8][2]) {

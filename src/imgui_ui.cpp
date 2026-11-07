@@ -55,12 +55,112 @@ namespace {
     Kind          g_lastKind = Kind::None;
     constexpr float PAW_UNIT = 2.4f, EMBER_UNIT = 2.2f;   // the sim is written in 440x270 "Cocos px"; ImGui is bigger
 
+    // ======================= Matrix (.glitch) + Cyber (.tech) =======================
+    // Cost per frame: Matrix = <= 24 x 7 rain characters; Cyber = ~70 grid lines + ~60 glow dots + the laser (3 calls).
+    // All state is fixed-size (RainSim) or kept in ImGui's own state storage; nothing is allocated.
+    fx::RainSim g_rain;
+    float g_laserY = -1e9f;                                // screen y of the Cyber laser this frame (widgets light up near it)
+    constexpr float RAIN_UNIT = 15.f;                      // ImGui px per rain cell
+
+    // label text where, now and then, one character swaps to a red or white symbol for a split second (Matrix)
+    void mxLabel(ImDrawList* dl, ImVec2 pos, ImU32 col, char const* s, char const* end, ImGuiID id) {
+        size_t len = end ? static_cast<size_t>(end - s) : std::strlen(s);
+        fx::Glitch g = fx::glitchFor(id, ImGui::GetTime(), len);
+        if (!g.on || s[g.idx] == ' ') { dl->AddText(pos, col, s, s + len); return; }
+        ImVec2 w0 = ImGui::CalcTextSize(s, s + g.idx);
+        ImVec2 w1 = ImGui::CalcTextSize(s + g.idx, s + g.idx + 1);
+        char gc[2] = { g.ch, 0 };
+        dl->AddText(pos, col, s, s + g.idx);
+        dl->AddText(ImVec2(pos.x + w0.x, pos.y), g.red ? U(1.f, 0.2f, 0.2f) : U(1.f, 1.f, 1.f), gc, gc + 1);
+        dl->AddText(ImVec2(pos.x + w0.x + w1.x, pos.y), col, s + g.idx + 1, s + len);
+    }
+
+    void mxBegin(ImVec2 wp, ImVec2 ws) {
+        float dt = std::min(ImGui::GetIO().DeltaTime, 0.05f);
+        ImDrawList* bg = ImGui::GetBackgroundDrawList();
+        ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
+        float th = ImGui::GetFrameHeight();
+        bg->AddRectFilled(wp, wmax, U(0.f, 0.f, 0.f, 1.f));                              // pure black
+        bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.16f, 0.06f, 1.f));     // title bar
+
+        // digital rain, 0.2 opacity, clipped to the window below the title bar
+        float areaTop = wp.y + th, areaH = ws.y - th;
+        fx::Rect box{ 0.f, 0.f, ws.x, areaH };                                            // local, y up
+        g_rain.step(dt, RAIN_UNIT, box);
+        bg->PushClipRect(ImVec2(wp.x, areaTop), wmax, true);
+        ImFont* font = ImGui::GetFont();
+        float fs = RAIN_UNIT * 0.95f;
+        for (int i = 0; i < g_rain.n; ++i) {
+            float x = wp.x + g_rain.colX(i, box) - fs * 0.25f;
+            for (int k = 0; k < fx::RainSim::TRAIL; ++k) {
+                float y = g_rain.c[i].head + static_cast<float>(k) * RAIN_UNIT;
+                if (y < 0.f || y > areaH) continue;
+                float a = fx::RainSim::cellAlpha(k) * fx::kRainAlpha;
+                ImU32 col = k == 0 ? U(0.75f, 1.f, 0.8f, a) : U(0.f, 1.f, 0.35f, a);
+                char const* gl = &fx::kRainGlyphs[g_rain.glyph(i, k) % (sizeof(fx::kRainGlyphs) - 1)];
+                bg->AddText(font, fs, ImVec2(x, areaTop + (areaH - y) - fs * 0.5f), col, gl, gl + 1);
+            }
+        }
+        bg->PopClipRect();
+
+        // green border; once in a while it tears for one frame (red ghost, shoved sideways)
+        bg->AddRect(wp, wmax, U(0.f, 0.9f, 0.3f, 1.f), 0.f, 0, 2.f);
+        if (fx::rnd() % 90 == 0)
+            bg->AddRect(ImVec2(wp.x + fx::rf(-5.f, 5.f), wp.y + fx::rf(-3.f, 3.f)),
+                        ImVec2(wmax.x + fx::rf(-5.f, 5.f), wmax.y), U(1.f, 0.15f, 0.15f, 0.8f), 0.f, 0, 2.f);
+    }
+
+    void cyBegin(ImVec2 wp, ImVec2 ws) {
+        double now = ImGui::GetTime();
+        ImDrawList* bg = ImGui::GetBackgroundDrawList();
+        ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
+        float th = ImGui::GetFrameHeight();
+        // deep dark blue -> near black
+        bg->AddRectFilledMultiColor(wp, wmax, U(0.02f, 0.05f, 0.12f), U(0.02f, 0.05f, 0.12f), U(0.f, 0.01f, 0.04f), U(0.f, 0.01f, 0.04f));
+        bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.14f, 0.22f, 1.f));
+        bg->AddLine(ImVec2(wp.x, wp.y + th), ImVec2(wmax.x, wp.y + th), U(0.f, 0.9f, 1.f, 0.8f), 1.5f);
+
+        // subtle glowing grid (slow brightness breathing), clipped under the title bar
+        float glow = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 1.6f);
+        constexpr float CELL = 30.f;
+        float gx0 = wp.x, gy0 = wp.y + th;
+        bg->PushClipRect(ImVec2(gx0, gy0), wmax, true);
+        int ix = 0;
+        for (float x = gx0 + CELL; x < wmax.x; x += CELL, ++ix) {
+            bool major = (ix % 4) == 3;
+            bg->AddLine(ImVec2(x, gy0), ImVec2(x, wmax.y), U(0.f, 0.85f, 1.f, (major ? 0.15f : 0.065f) * glow), major ? 1.5f : 1.f);
+        }
+        int iy = 0;
+        for (float y = gy0 + CELL; y < wmax.y; y += CELL, ++iy) {
+            bool major = (iy % 4) == 3;
+            bg->AddLine(ImVec2(gx0, y), ImVec2(wmax.x, y), U(0.f, 0.85f, 1.f, (major ? 0.15f : 0.065f) * glow), major ? 1.5f : 1.f);
+        }
+        ix = 0;
+        for (float x = gx0 + CELL; x < wmax.x; x += CELL, ++ix) {
+            if ((ix % 4) != 3) continue;
+            iy = 0;
+            for (float y = gy0 + CELL; y < wmax.y; y += CELL, ++iy)
+                if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 2.2f, U(0.f, 0.9f, 1.f, 0.22f * glow), 8);   // glowing intersections
+        }
+        bg->PopClipRect();
+
+        // neon border with a soft pulsing halo
+        float pulse = fx::pulse01(now, 0.6f);
+        bg->AddRect(wp, wmax, U(0.f, 0.9f, 1.f, 0.10f + 0.10f * pulse), 0.f, 0, 8.f);
+        bg->AddRect(wp, wmax, U(0.f, 0.95f, 1.f, 0.95f), 0.f, 0, 2.f);
+
+        // laser height this frame; fxEnd draws it, fxButton / the toggles read it to light up
+        g_laserY = gy0 + (ws.y - th - 4.f) * fx::scanPos(now);
+    }
+
     // Called right after Begin(): draws the themed window body BEHIND the widgets (background draw list,
     // clipped to the window rect so nothing ever renders outside the menu) and steps the particles.
     void fxBegin(ImVec2 wp, ImVec2 ws) {
         Kind k = curKind();
-        if (k != g_lastKind) { g_paws.clear(); g_embers.clear(); g_lastKind = k; }
+        if (k != g_lastKind) { g_paws.clear(); g_embers.clear(); g_rain.clear(); g_lastKind = k; }
         if (k == Kind::None) return;
+        if (k == Kind::Matrix) { mxBegin(wp, ws); return; }
+        if (k == Kind::Cyber)  { cyBegin(wp, ws);  return; }
 
         float dt = std::min(ImGui::GetIO().DeltaTime, 0.05f);
         double now = ImGui::GetTime();
@@ -156,6 +256,21 @@ namespace {
 
     // Called just before End(): click paws float on top of the widgets, still clipped to the window.
     void fxEnd(ImVec2 wp, ImVec2 ws) {
+        if (curKind() == Kind::Cyber) {
+            // the scanning laser: bright cyan line + a soft band each side, on top of the widgets, clipped to the window.
+            // 3 draw calls. Whatever it crosses is lit by the band (and the toggles / buttons brighten themselves).
+            ImDrawList* fg = ImGui::GetForegroundDrawList();
+            ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
+            fg->PushClipRect(ImVec2(wp.x, wp.y + ImGui::GetFrameHeight()), wmax, true);
+            float y = g_laserY, band = 26.f;
+            fg->AddRectFilledMultiColor(ImVec2(wp.x, y - band), ImVec2(wmax.x, y),
+                U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.16f));
+            fg->AddRectFilledMultiColor(ImVec2(wp.x, y), ImVec2(wmax.x, y + band),
+                U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.16f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
+            fg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.95f), 2.f);
+            fg->PopClipRect();
+            return;
+        }
         if (curKind() != Kind::Cat || g_paws.alive() == 0) return;
         ImDrawList* fg = ImGui::GetForegroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
@@ -199,6 +314,33 @@ namespace {
             dl->AddRect(ImVec2(c.x - h.x, c.y - h.y), ImVec2(c.x + h.x, c.y + h.y), U(1.f, 0.62f, 0.60f, 0.9f), r, 0, 2.f);
             dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * s,
                         ImVec2(c.x - ts.x * 0.5f * s, c.y - ts.y * 0.5f * s), txt, label, end);
+        } else if (k == Kind::Cyber) {
+            // chamfered sci-fi corners + glowing cyan outline; brighter while the laser passes over it
+            float li = fx::laserHit(c.y, g_laserY, sz.y * 1.2f);
+            ImVec2 pts[8];
+            imChamfer(p.x, p.y, p.x + sz.x, p.y + sz.y, sz.y * 0.28f, pts);
+            dl->AddConvexPolyFilled(pts, 8, act ? U(0.f, 0.35f, 0.5f) : hov ? U(0.f, 0.22f, 0.34f) : U(0.01f, 0.08f, 0.15f));
+            if (li > 0.f) dl->AddConvexPolyFilled(pts, 8, U(0.f, 1.f, 1.f, 0.18f * li));
+            dl->AddPolyline(pts, 8, U(0.f, 0.9f, 1.f, 0.16f + 0.16f * li + (hov || act ? 0.12f : 0.f)), ImDrawFlags_Closed, 6.f);   // glow
+            dl->AddPolyline(pts, 8, U(lerpf(0.f, 0.7f, li), 0.95f, 1.f, hov || act ? 1.f : 0.88f), ImDrawFlags_Closed, 2.f);        // outline
+            dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(0.82f, 1.f, 1.f), label, end);
+        } else if (k == Kind::Matrix) {
+            // flat black + green border. While hovered / pressed the border violently glitches: new random shoves,
+            // a red and a white ghost, every frame (65% of frames), so it looks like it tears for a frame at a time
+            ImVec2 a(p.x, p.y), b(p.x + sz.x, p.y + sz.y);
+            dl->AddRectFilled(a, b, hov || act ? U(0.f, 0.16f, 0.06f) : U(0.f, 0.f, 0.f));
+            ImU32 green = U(0.f, 0.95f, 0.35f);
+            if ((hov || act) && fx::rnd() % 100 < 65u) {
+                int n = 2 + static_cast<int>(fx::rnd() % 2u);
+                for (int j = 0; j < n; ++j) {
+                    float dx = fx::rf(-5.f, 5.f), dy = fx::rf(-3.f, 3.f);
+                    ImU32 col = j == 0 ? U(1.f, 0.15f, 0.15f, 0.9f) : j == 1 ? U(1.f, 1.f, 1.f, 0.8f) : green;
+                    dl->AddRect(ImVec2(a.x + dx, a.y + dy), ImVec2(b.x + dx, b.y + dy), col, 0.f, 0, 1.5f);
+                }
+            } else {
+                dl->AddRect(a, b, green, 0.f, 0, 1.5f);
+            }
+            mxLabel(dl, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(0.78f, 1.f, 0.82f), label, end, id);
         } else {
             ImVec2 pts[8];
             imChamfer(p.x, p.y, p.x + sz.x, p.y + sz.y, sz.y * 0.28f, pts);
@@ -209,10 +351,108 @@ namespace {
         return pressed;
     }
 
+    // Matrix toggle: no checkbox. A block of binary: "1 0 1" green = ON, "0 X 0" corrupted red = OFF.
+    // On every change the text scrolls random characters for ~0.5 s and locks in left to right.
+    bool mxToggle(char const* label, bool* v) {
+        ImGuiStyle& st = ImGui::GetStyle();
+        float bh = ImGui::GetFrameHeight();
+        ImVec2 ts = ImGui::CalcTextSize(label, nullptr, true);
+        ImVec2 bin = ImGui::CalcTextSize(fx::kBinOn);
+        float bw = bin.x + st.FramePadding.x * 2.f;
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGuiID id = ImGui::GetID(label);
+        bool pressed = ImGui::InvisibleButton(label, ImVec2(bw + (ts.x > 0.f ? st.ItemInnerSpacing.x + ts.x : 0.f), bh));
+        if (pressed) *v = !*v;
+        bool hov = ImGui::IsItemHovered();
+
+        // when did this switch last change (a click or the game flipping it)? kept in ImGui's state storage
+        ImGuiStorage* S = ImGui::GetStateStorage();
+        ImGuiID kPrev = id ^ 0x4D58u, kAt = id ^ 0x5458u;
+        double now = ImGui::GetTime();
+        float cur = *v ? 1.f : 0.f, prev = S->GetFloat(kPrev, -1.f);
+        if (prev < 0.f) S->SetFloat(kAt, -10.f);                         // first time seen: no animation
+        else if (prev != cur) S->SetFloat(kAt, static_cast<float>(now));
+        S->SetFloat(kPrev, cur);
+        float t = static_cast<float>(now) - S->GetFloat(kAt, -10.f);
+
+        char buf[16];
+        char const* target = *v ? fx::kBinOn : fx::kBinOff;
+        char const* shown = target;
+        bool scrolling = false;
+        if (t >= 0.f && t < 0.6f) {                                      // just changed: scroll, then lock in
+            scrolling = !fx::scramble(target, t, static_cast<uint32_t>(now * 30.0) + id, buf, sizeof(buf));
+            shown = buf;
+        }
+
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 a(p.x, p.y), b(p.x + bw, p.y + bh);
+        ImU32 col = scrolling ? U(0.78f, 1.f, 0.82f) : *v ? U(0.f, 1.f, 0.31f) : U(1.f, 0.2f, 0.2f);
+        dl->AddRectFilled(a, b, *v ? U(0.f, 0.20f, 0.05f) : U(0.24f, 0.f, 0.f));
+        dl->AddRect(a, b, *v ? U(0.f, 0.95f, 0.3f, hov ? 1.f : 0.85f) : U(1.f, 0.2f, 0.2f, hov ? 1.f : 0.85f), 0.f, 0, hov ? 2.5f : 1.5f);
+        ImVec2 tp(a.x + (bw - bin.x) * 0.5f, a.y + (bh - bin.y) * 0.5f);
+        dl->AddText(tp, col, shown);
+        if (!*v) {                                                       // OFF is "corrupted": rare one-frame white tear + torn strip
+            uint32_t h = fx::hash32(id, static_cast<uint32_t>(now * 15.0));
+            if (h % 40u == 0) dl->AddText(ImVec2(tp.x + 2.f, tp.y - 1.f), U(1.f, 1.f, 1.f, 0.55f), shown);
+            if (h % 25u == 1) dl->AddRectFilled(ImVec2(a.x + 2.f, a.y + bh * 0.4f), ImVec2(a.x + bw * 0.7f, a.y + bh * 0.4f + 2.f), U(1.f, 0.3f, 0.3f, 0.7f));
+        }
+        if (ts.x > 0.f) {
+            char const* end = std::strstr(label, "##");
+            mxLabel(dl, ImVec2(b.x + st.ItemInnerSpacing.x, a.y + (bh - ts.y) * 0.5f), U(0.78f, 1.f, 0.82f), label, end, id);
+        }
+        return pressed;
+    }
+
+    // Cyber toggle: a hexagonal switch. ON = pulsing neon cyan border + inner glow, knob slid right.
+    // OFF = dark grey, no glow, knob left. The label is bright cyan ON / dark grey OFF and fades in on change.
+    bool cyToggle(char const* label, bool* v) {
+        ImGuiStyle& st = ImGui::GetStyle();
+        float bs = ImGui::GetFrameHeight(), tw = bs * 1.8f;
+        ImVec2 ts = ImGui::CalcTextSize(label, nullptr, true);
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGuiID id = ImGui::GetID(label);
+        bool pressed = ImGui::InvisibleButton(label, ImVec2(tw + (ts.x > 0.f ? st.ItemInnerSpacing.x + ts.x : 0.f), bs));
+        if (pressed) *v = !*v;
+        bool hov = ImGui::IsItemHovered();
+
+        ImGuiStorage* S = ImGui::GetStateStorage();
+        float target = *v ? 1.f : 0.f;
+        float a = S->GetFloat(id, target);
+        a += (target - a) * std::min(1.f, ImGui::GetIO().DeltaTime * 12.f);
+        S->SetFloat(id, a);
+
+        float pulse = fx::pulse01(ImGui::GetTime(), 1.4f);
+        float x0 = p.x, y0 = p.y, x1 = p.x + tw, y1 = p.y + bs, cy = (y0 + y1) * 0.5f, c = bs * 0.30f;
+        float li = fx::laserHit(cy, g_laserY, bs * 1.2f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 hx[6] = { ImVec2(x0 + c, y0), ImVec2(x1 - c, y0), ImVec2(x1, cy), ImVec2(x1 - c, y1), ImVec2(x0 + c, y1), ImVec2(x0, cy) };
+        dl->AddConvexPolyFilled(hx, 6, U(lerpf(0.07f, 0.f, a), lerpf(0.08f, 0.16f, a), lerpf(0.10f, 0.22f, a)));
+        if (a > 0.02f) {
+            dl->AddPolyline(hx, 6, U(0.f, 0.95f, 1.f, (0.18f + 0.22f * pulse) * a), ImDrawFlags_Closed, bs * 0.36f);   // soft outer glow
+            ImVec2 in[6];
+            for (int i = 0; i < 6; ++i) in[i] = ImVec2(lerpf(hx[i].x, (x0 + x1) * 0.5f, 0.28f), lerpf(hx[i].y, cy, 0.28f));
+            dl->AddConvexPolyFilled(in, 6, U(0.f, 0.9f, 1.f, (0.10f + 0.12f * pulse) * a));                           // inner glow
+        }
+        dl->AddPolyline(hx, 6, U(lerpf(0.22f, 0.f, a), lerpf(0.25f, 0.95f, a), lerpf(0.30f, 1.f, a)), ImDrawFlags_Closed, hov ? 3.f : 2.f);
+        float kx = lerpf(x0 + bs * 0.55f, x1 - bs * 0.55f, a), kr = bs * 0.26f;
+        ImVec2 kn[6] = { ImVec2(kx - kr * 0.6f, cy - kr), ImVec2(kx + kr * 0.6f, cy - kr), ImVec2(kx + kr, cy),
+                         ImVec2(kx + kr * 0.6f, cy + kr), ImVec2(kx - kr * 0.6f, cy + kr), ImVec2(kx - kr, cy) };
+        dl->AddConvexPolyFilled(kn, 6, U(lerpf(0.25f, 0.65f, a), lerpf(0.27f, 1.f, a), lerpf(0.31f, 1.f, a)));
+        if (li > 0.f) dl->AddPolyline(hx, 6, U(0.6f, 1.f, 1.f, 0.8f * li), ImDrawFlags_Closed, 2.5f);                  // laser highlight
+        if (ts.x > 0.f) {
+            char const* end = std::strstr(label, "##");
+            ImU32 tc = U(lerpf(0.30f, 0.f, a), lerpf(0.34f, 0.94f, a), lerpf(0.40f, 1.f, a));
+            dl->AddText(ImVec2(x1 + st.ItemInnerSpacing.x, cy - ts.y * 0.5f), tc, label, end);
+        }
+        return pressed;
+    }
+
     // Checkbox. Cat: cat-face box (ears) that pops a paw print in. Lava: magma box with an orange check.
     bool fxCheckbox(char const* label, bool* v) {
         Kind k = curKind();
         if (k == Kind::None) return ImGui::Checkbox(label, v);
+        if (k == Kind::Matrix) return mxToggle(label, v);
+        if (k == Kind::Cyber)  return cyToggle(label, v);
         ImGuiStyle& st = ImGui::GetStyle();
         float bs = ImGui::GetFrameHeight();
         ImVec2 ts = ImGui::CalcTextSize(label, nullptr, true);
@@ -347,6 +587,62 @@ namespace {
             c[ImGuiCol_FrameBgActive] = ImVec4(0.40f, 0.15f, 0.08f, 1.f);
             c[ImGuiCol_CheckMark]     = ImVec4(1.00f, 0.55f, 0.10f, 1.f);
             c[ImGuiCol_Tab]           = ImVec4(0.20f, 0.09f, 0.06f, 1.f);
+        }
+        st.FrameBorderSize = 0.f;
+        if (k == fx::Kind::Matrix) {
+            // ---- Matrix: pure black, terminal green, sharp corners (body / rain / buttons / toggles: fxBegin etc.) ----
+            wr = 0.f; fr = 0.f;
+            st.FrameBorderSize = 1.f;
+            c[ImGuiCol_Text]          = ImVec4(0.78f, 1.00f, 0.82f, 1.f);
+            c[ImGuiCol_TextDisabled]  = ImVec4(0.10f, 0.50f, 0.22f, 1.f);
+            c[ImGuiCol_WindowBg]      = ImVec4(0.f, 0.f, 0.f, 1.f);
+            c[ImGuiCol_PopupBg]       = ImVec4(0.f, 0.05f, 0.02f, 0.98f);
+            c[ImGuiCol_Border]        = ImVec4(0.f, 0.90f, 0.30f, 1.f);
+            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);           // drawn by fxBegin
+            c[ImGuiCol_TitleBgActive] = ImVec4(0.f, 0.f, 0.f, 0.f);
+            c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.f, 0.16f, 0.06f, 1.f);
+            c[ImGuiCol_FrameBg]       = ImVec4(0.f, 0.10f, 0.04f, 1.f);
+            c[ImGuiCol_FrameBgHovered]= ImVec4(0.f, 0.18f, 0.07f, 1.f);
+            c[ImGuiCol_FrameBgActive] = ImVec4(0.f, 0.28f, 0.10f, 1.f);
+            c[ImGuiCol_CheckMark]     = ImVec4(0.f, 1.00f, 0.31f, 1.f);
+            c[ImGuiCol_SliderGrab]    = ImVec4(0.f, 0.90f, 0.30f, 1.f);
+            c[ImGuiCol_SliderGrabActive] = ImVec4(0.5f, 1.f, 0.6f, 1.f);
+            c[ImGuiCol_Button]        = ImVec4(0.f, 0.f, 0.f, 1.f);
+            c[ImGuiCol_ButtonHovered] = ImVec4(0.f, 0.16f, 0.06f, 1.f);
+            c[ImGuiCol_ButtonActive]  = ImVec4(0.f, 0.28f, 0.10f, 1.f);
+            c[ImGuiCol_Tab]           = ImVec4(0.f, 0.10f, 0.04f, 1.f);
+            c[ImGuiCol_TabHovered]    = ImVec4(0.f, 0.40f, 0.15f, 1.f);
+            c[ImGuiCol_TabActive]     = ImVec4(0.f, 0.25f, 0.10f, 1.f);
+            c[ImGuiCol_Separator]     = ImVec4(0.f, 0.50f, 0.20f, 1.f);
+            c[ImGuiCol_ScrollbarBg]   = ImVec4(0.f, 0.f, 0.f, 0.6f);
+            c[ImGuiCol_ScrollbarGrab] = ImVec4(0.f, 0.45f, 0.18f, 1.f);
+        } else if (k == fx::Kind::Cyber) {
+            // ---- Cyber: deep blue-black, neon cyan (grid / laser / hex switches / chamfered buttons: fxBegin etc.) ----
+            wr = 0.f; fr = 0.f;
+            st.FrameBorderSize = 1.f;
+            c[ImGuiCol_Text]          = ImVec4(0.78f, 0.97f, 1.00f, 1.f);
+            c[ImGuiCol_TextDisabled]  = ImVec4(0.30f, 0.38f, 0.45f, 1.f);
+            c[ImGuiCol_WindowBg]      = ImVec4(0.016f, 0.035f, 0.08f, 1.f);
+            c[ImGuiCol_PopupBg]       = ImVec4(0.02f, 0.05f, 0.10f, 0.98f);
+            c[ImGuiCol_Border]        = ImVec4(0.f, 0.80f, 0.90f, 0.8f);
+            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);           // drawn by fxBegin
+            c[ImGuiCol_TitleBgActive] = ImVec4(0.f, 0.f, 0.f, 0.f);
+            c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.f, 0.14f, 0.22f, 1.f);
+            c[ImGuiCol_FrameBg]       = ImVec4(0.03f, 0.07f, 0.13f, 1.f);
+            c[ImGuiCol_FrameBgHovered]= ImVec4(0.04f, 0.13f, 0.22f, 1.f);
+            c[ImGuiCol_FrameBgActive] = ImVec4(0.05f, 0.20f, 0.32f, 1.f);
+            c[ImGuiCol_CheckMark]     = ImVec4(0.f, 0.94f, 1.f, 1.f);
+            c[ImGuiCol_SliderGrab]    = ImVec4(0.f, 0.85f, 0.95f, 1.f);
+            c[ImGuiCol_SliderGrabActive] = ImVec4(0.6f, 1.f, 1.f, 1.f);
+            c[ImGuiCol_Button]        = ImVec4(0.01f, 0.08f, 0.15f, 1.f);
+            c[ImGuiCol_ButtonHovered] = ImVec4(0.f, 0.22f, 0.34f, 1.f);
+            c[ImGuiCol_ButtonActive]  = ImVec4(0.f, 0.35f, 0.50f, 1.f);
+            c[ImGuiCol_Tab]           = ImVec4(0.03f, 0.07f, 0.13f, 1.f);
+            c[ImGuiCol_TabHovered]    = ImVec4(0.f, 0.45f, 0.60f, 1.f);
+            c[ImGuiCol_TabActive]     = ImVec4(0.f, 0.28f, 0.42f, 1.f);
+            c[ImGuiCol_Separator]     = ImVec4(0.f, 0.45f, 0.55f, 1.f);
+            c[ImGuiCol_ScrollbarBg]   = ImVec4(0.f, 0.02f, 0.05f, 0.6f);
+            c[ImGuiCol_ScrollbarGrab] = ImVec4(0.f, 0.50f, 0.60f, 1.f);
         }
         st.WindowRounding = wr;
         st.FrameRounding = st.GrabRounding = st.TabRounding = st.ChildRounding = fr;
