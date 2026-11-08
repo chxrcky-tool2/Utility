@@ -5,6 +5,10 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     strategy:
@@ -20,12 +24,44 @@ jobs:
 
     name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
 
+      # Pre-install Ninja from apt (retries on network hiccups) so the action
+      # does not depend on a flaky download from GitHub releases.
+      - name: Install Ninja
+        run: |
+          for i in 1 2 3 4 5; do
+            sudo apt-get update && sudo apt-get install -y ninja-build && break
+            echo "apt attempt $i failed, retrying..."
+            sleep 10
+          done
+          ninja --version
+
+      # Attempt 1
       - name: Build Mod
+        id: build1
+        continue-on-error: true
         uses: geode-sdk/build-geode-mod@main
         with:
           target: ${{ matrix.config.target }}
-          # use-cpm-cache: false   # uncomment if the CPM cache hangs again
+          use-cpm-cache: false
+
+      # Attempt 2: only runs if attempt 1 failed (covers transient network errors)
+      - name: Build Mod (retry)
+        id: build2
+        if: steps.build1.outcome == 'failure'
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          target: ${{ matrix.config.target }}
+          use-cpm-cache: false
+
+      - name: Upload .geode file
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChxrCky-${{ matrix.config.name }}
+          path: ${{ steps.build2.outputs.build-output || steps.build1.outputs.build-output }}
+          if-no-files-found: warn
