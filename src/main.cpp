@@ -423,6 +423,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
             }
 
+            ckyFwCapture(this);    // frame window calculator: ring of the last few steps (only when enabled)
             ckyTrailCapture(this); // hitbox trail: this step's hitboxes (after any frame fix)
 
             if (cky::noclip) {
@@ -454,6 +455,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 if (down) ckyTelemetryPress();
                 ckyClickSound(down, isPlayer1);
             }
+            if (down && !cky::resimming) ckyFwOnPress(this, isPlayer1); // frame window calculator: queued, runs after this frame
             if (!cky::injecting) ckyInputLog(down, button | (isPlayer1 ? 0 : cky::P2_FLAG));
 
             // recording only runs after a level restart (armed)
@@ -628,7 +630,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
-        if (ckyTrajHandleDeath(player)) return; // trajectory fake player died: not a real death
+        if (ckyTrajHandleDeath(player, object)) return; // trajectory fake player died: not a real death
         if (cky::noclip && object != m_anticheatSpike) {
             cky::ncBlocked = true;
             return;

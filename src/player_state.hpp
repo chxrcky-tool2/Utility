@@ -15,6 +15,7 @@
 #include "real_fields.hpp" // dash / holding state, real players only
 
 #include <Geode/Geode.hpp>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -77,6 +78,80 @@ namespace cky {
         run(p);
         p->setPosition(s.pos);
         p->setRotation(s.rot);
+    }
+}
+
+// ---- allocation-free snapshot (Frame Window Calculator) ----------------------------------------
+// Same member list as the trajectory fake players (CKY_TRAJ_FIELDS: no m_isDashing, like xdBot's fake
+// players), but written into a fixed buffer, so taking one every physics step never allocates.
+inline constexpr size_t CKY_SIM_BYTES = 3072;
+
+struct CkySimSnap {
+    std::array<uint8_t, CKY_SIM_BYTES> b;   // only [0, n) is meaningful
+    uint16_t n = 0;
+    cocos2d::CCPoint pos{ 0.f, 0.f };
+    float rot = 0.f;
+    uint32_t step = 0;                       // cky::step this snapshot was taken on
+    bool valid = false;
+};
+
+namespace cky {
+    template <class T>
+    inline void simPut(CkySimSnap& s, size_t& off, bool& over, T const& v) {
+        if (off + sizeof(T) > s.b.size()) { over = true; return; }
+        std::memcpy(s.b.data() + off, &v, sizeof(T));
+        off += sizeof(T);
+    }
+
+    // false = the member list no longer fits CKY_SIM_BYTES (raise it)
+    inline bool captureSim(CkySimSnap& s, PlayerObject* p) {
+        s.valid = false;
+        s.n = 0;
+        if (!p) return false;
+        size_t off = 0;
+        bool over = false;
+        auto run = [&](auto* d) {
+#define CKY_SIM_CAP(f) if constexpr (CKY_PS_OK(f)) { simPut(s, off, over, d->f); }
+            CKY_TRAJ_FIELDS(CKY_SIM_CAP)
+#undef CKY_SIM_CAP
+        };
+        run(p);
+        if (over) return false;
+        s.n = static_cast<uint16_t>(off);
+        s.pos = p->getPosition();
+        s.rot = p->getRotation();
+        s.valid = true;
+        return true;
+    }
+
+    inline void restoreSim(PlayerObject* p, CkySimSnap const& s) {
+        if (!p || !s.valid) return;
+        auto run = [&](auto* d) {
+            size_t off = 0;
+#define CKY_SIM_PUT(f) if constexpr (CKY_PS_OK(f)) { \
+                std::remove_cvref_t<decltype(d->f)> tmp; \
+                if (off + sizeof(tmp) <= s.n) { \
+                    std::memcpy(&tmp, s.b.data() + off, sizeof(tmp)); \
+                    d->f = tmp; \
+                } \
+                off += sizeof(tmp); \
+            }
+            CKY_TRAJ_FIELDS(CKY_SIM_PUT)
+#undef CKY_SIM_PUT
+        };
+        run(p);
+        p->setPosition(s.pos);
+        p->setRotation(s.rot);
+    }
+
+    // copies only the used part of the buffer
+    inline void copySim(CkySimSnap& dst, CkySimSnap const& src) {
+        dst.valid = src.valid;
+        dst.n = src.n;
+        dst.pos = src.pos;
+        dst.rot = src.rot;
+        dst.step = src.step;
+        if (src.n) std::memcpy(dst.b.data(), src.b.data(), src.n);
     }
 }
 

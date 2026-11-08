@@ -16,6 +16,7 @@ using namespace geode::prelude;
 #include "player_state.hpp"
 #include "fixstate.hpp"
 #include "themes.hpp"
+#include "framewindow.hpp"
 
 // per-step player snapshot used by "Frame fixes" (position + rotation of both players)
 struct FrameFix {
@@ -65,7 +66,12 @@ void ckyClickRescan();
 std::string ckyClickPackName();
 void ckyClickPackStep(int dir);
 bool ckyImportGdr();
-bool ckyTrajHandleDeath(PlayerObject* player); // true = it was a trajectory fake player
+bool ckyTrajHandleDeath(PlayerObject* player, GameObject* object = nullptr); // true = it was a trajectory fake player
+// trajectory.cpp helpers shared with the Frame Window Calculator (framewindow.cpp)
+float ckyTrajStepDelta();
+void  ckyTrajResetCancel();
+bool  ckyTrajCancelled();
+bool  ckyTrajKiller(CCPoint* topCenter); // object that killed a fake player since the last reset
 void ckyTrajClear();
 bool ckyUiIsImGui();
 void ckyImGuiToggle();

@@ -26,6 +26,8 @@ namespace {
         CCPoint p1Hold[512];
         CCPoint p2Hold[512];
         bool loggedCopy = false;
+        bool hasKiller = false;      // a fake player died on an object (Frame Window Calculator reads it)
+        CCPoint killer{ 0.f, 0.f };  // top-centre of that object, object-layer coordinates
     };
     Traj g_t;
 
@@ -171,13 +173,27 @@ namespace {
     }
 }
 
-bool ckyTrajHandleDeath(PlayerObject* player) {
+bool ckyTrajHandleDeath(PlayerObject* player, GameObject* object) {
     if (cky::trajCreating || (player && (player == g_t.fake1.data() || player == g_t.fake2.data()))) {
         if (player) g_t.deathRot = player->getRotation();
+        if (object) {
+            CCRect r = object->getObjectRect();
+            g_t.killer = ccp(r.getMidX(), r.getMaxY());
+            g_t.hasKiller = true;
+        }
         g_t.cancel = true;
         return true;
     }
     return false;
+}
+
+float ckyTrajStepDelta() { return g_t.delta; }
+void ckyTrajResetCancel() { g_t.cancel = false; g_t.hasKiller = false; }
+bool ckyTrajCancelled() { return g_t.cancel; }
+bool ckyTrajKiller(CCPoint* out) {
+    if (!g_t.hasKiller) return false;
+    if (out) *out = g_t.killer;
+    return true;
 }
 
 void ckyTrajClear() {
