@@ -13,7 +13,7 @@ jobs:
         config:
           - name: Android64
             os: ubuntu-latest
-            target: Android
+            target: Android64
           - name: Android32
             os: ubuntu-latest
             target: Android32
@@ -28,5 +28,4 @@ jobs:
         uses: geode-sdk/build-geode-mod@main
         with:
           target: ${{ matrix.config.target }}
-          # Disable the cache that is hanging
-          cache: false 
+          # use-cpm-cache: false   # uncomment if the CPM cache hangs again
