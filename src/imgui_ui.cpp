@@ -188,16 +188,21 @@ namespace {
                 if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 1.6f, U(0.f, 0.9f, 1.f, 0.12f * glow), 8);   // glowing intersections
         }
 
-        // the scanning laser. It is drawn HERE, on the background list, so every label, button and switch is drawn on
-        // top of it: the laser can never hide or wash out text. Buttons / switches still read g_laserY to light up.
-        g_laserY = gy0 + (ws.y - th - 4.f) * fx::scanPos(now);
+        bg->PopClipRect();   // end of the grid clip (the grid stays below the title bar)
+
+        // The scanning laser. It is drawn HERE, on the background list, so every label, button and switch is drawn on
+        // top of it: the laser can never hide or wash out text. It sweeps the WHOLE window, top edge to bottom edge
+        // (its own clip = the window rect). Buttons / switches still read g_laserY to light up.
+        g_laserY = wp.y + 1.f + (ws.y - 2.f) * fx::scanPos(now);
+        bg->PushClipRect(wp, wmax, true);
         {
-            float y = g_laserY, band = 18.f;
+            float y = g_laserY, band = 26.f;
             bg->AddRectFilledMultiColor(ImVec2(wp.x, y - band), ImVec2(wmax.x, y),
-                U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.07f), U(0.f, 1.f, 1.f, 0.07f));
+                U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.08f));
             bg->AddRectFilledMultiColor(ImVec2(wp.x, y), ImVec2(wmax.x, y + band),
-                U(0.f, 1.f, 1.f, 0.07f), U(0.f, 1.f, 1.f, 0.07f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
-            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.60f), 1.2f);
+                U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
+            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.f, 1.f, 1.f, 0.16f), 8.f);      // soft thick halo
+            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.65f), 2.6f);    // thicker core line
         }
         bg->PopClipRect();
 
@@ -761,6 +766,15 @@ namespace {
             st.ScrollbarSize = 18.f;
             st.WindowBorderSize = 1.f;
         }
+        // Every window / popup / scrollbar surface is fully opaque in EVERY theme (ImGui's own defaults are 0.94 / 0.53 / 0.51).
+        // Only the in-level HUD has an opacity setting (Display tab: HUD opacity).
+        st.Alpha = 1.f;
+        c[ImGuiCol_WindowBg].w = 1.f;
+        c[ImGuiCol_MenuBarBg].w = 1.f;
+        c[ImGuiCol_ScrollbarBg].w = 1.f;
+        c[ImGuiCol_TitleBgCollapsed].w = std::max(c[ImGuiCol_TitleBgCollapsed].w, 1.f);
+        if (k == fx::Kind::None) c[ImGuiCol_PopupBg] = ImVec4(0.09f, 0.09f, 0.13f, 1.f);
+        c[ImGuiCol_PopupBg].w = 1.f;
         st.WindowRounding = wr;
         st.FrameRounding = st.GrabRounding = st.TabRounding = st.ChildRounding = fr;
         st.PopupRounding = fr;
@@ -963,35 +977,41 @@ namespace {
         fxCheckbox("Safe mode", &cky::safeMode);
 
         ImGui::Separator();
-        ImGui::Text("Frame Window Calculator");
         bool fw = cky::fwOn;
         if (fxCheckbox("Frame window calculator", &fw)) {
             cky::fwOn = fw;
             ckyFwSave();
         }
-        bool ch = false;
-        ch |= fxCheckbox("Show label above obstacle", &cky::fwShow);
-        ch |= fxCheckbox("Jingle Bells on perfect click", &cky::fwJingle);
-        float sw = ImGui::GetContentRegionAvail().x * 0.55f;
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderInt("Frames ahead", &cky::fwAhead, 1, 10);
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderInt("Frames behind", &cky::fwBack, 0, 10);
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderInt("Steps checked after a click", &cky::fwLook, 20, 240);
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderInt("Perfect = window of (steps)", &cky::fwPerfect, 1, 6);
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderInt("Jingle volume", &cky::fwVol, 0, 200, "%d%%");
-        ImGui::SetNextItemWidth(sw);
-        ch |= ImGui::SliderFloat("Label size", &cky::fwScale, 0.5f, 2.5f, "%.1fx");
-        if (ch) ckyFwSave();
-        if (fxButton("Test jingle")) ckyFwTestSound();
-        auto const& fr = ckyFwResult();
-        if (fr.valid) {
-            ImGui::TextDisabled("Last click: %.2f ms, %d sims%s", fr.ms, fr.sims, fr.incomplete ? " (cut short)" : "");
-        } else {
-            ImGui::TextDisabled("Runs once per click, after the frame.");
+        if (cky::fwOn && cky::hudOn) {
+            ImGui::TextDisabled("Turn HUD off (Display tab) to see the label.");
+            if (fxButton("Turn HUD off")) {
+                cky::hudOn = false;
+                if (auto h = ckyHudNode()) h->setVisible(false);
+            }
+        }
+        if (ImGui::TreeNode("Frame window settings")) {
+            bool ch = false;
+            ch |= fxCheckbox("Show label", &cky::fwShow);
+            ch |= fxCheckbox("Jingle Bells on perfect", &cky::fwJingle);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderFloat("Count speed", &cky::fwSpeed, 0.25f, 2.f, "%.2fx");
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderInt("Frames ahead", &cky::fwAhead, 1, 10);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderInt("Frames behind", &cky::fwBack, 0, 10);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderInt("Check steps", &cky::fwLook, 20, 240);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderInt("Perfect (steps)", &cky::fwPerfect, 1, 6);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderInt("Jingle volume", &cky::fwVol, 0, 200, "%d%%");
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ch |= ImGui::SliderFloat("Label size", &cky::fwScale, 0.5f, 2.5f, "%.1fx");
+            if (ch) ckyFwSave();
+            if (fxButton("Test jingle")) ckyFwTestSound();
+            auto const& fr = ckyFwResult();
+            if (fr.valid) ImGui::TextDisabled("Last click: %.2f ms, %d sims", fr.ms, fr.sims);
+            ImGui::TreePop();
         }
     }
 
@@ -1143,18 +1163,29 @@ namespace {
         }
     }
 
-    // Frame Window Calculator label: drawn on the background list, so it works with the menu closed.
-    // Window -> FPS: a click made at F FPS can only land on a frame boundary, every (steps/s)/F steps, so a window of W steps
-    // is guaranteed at F FPS when W >= ceil(stepHz / F), and only possible (chance ~ W / (stepHz / F)) below that.
+    // Frame Window Calculator label. The result is computed at once; here it is COUNTED OUT slowly (cky::fwSpeed):
+    // "frames to click" ticks up from 0 to the start of the window, then across the window, and only then the
+    // 60 / 120 / 240 FW rows are shown. Hidden while the HUD is on (the HUD sits where the label goes).
+    // Window -> FW: 1 step = 240 FW, 2-3 steps = 120 FW, 4+ steps = 60 FW (a frame at F FPS lands every 240/F steps).
     void drawFrameWindow() {
-        if (!cky::fwOn || !cky::fwShow) return;
+        if (!cky::fwOn || !cky::fwShow || cky::hudOn) return;
         auto pl = PlayLayer::get();
         if (!pl || !pl->m_objectLayer) return;
         auto const& r = ckyFwResult();
         if (!r.valid) return;
+
         double age = cky::fwNow() - r.stamp;
-        if (age > cky::fwHold) return;
-        float fade = std::clamp(static_cast<float>((cky::fwHold - age) / 0.5), 0.f, 1.f);
+        float rate = 20.f * std::clamp(cky::fwSpeed, 0.25f, 2.f);     // frames counted per second
+        int start = std::max(r.lo, 0);
+        int endv = r.hi;
+        bool ahead = r.window && endv >= 0;                          // part of the window is still in front of the click
+        float countSecs = ahead ? static_cast<float>(endv) / rate : 0.f;
+        if (age > countSecs + cky::fwHold) return;
+        float fade = std::clamp(static_cast<float>((countSecs + cky::fwHold - age) / 0.5), 0.f, 1.f);
+
+        int counted = static_cast<int>(age * rate);
+        bool done = !ahead || counted >= endv;
+        int shownEnd = std::clamp(counted, start, std::max(start, endv));
 
         ImGuiIO& io = ImGui::GetIO();
         CCSize win = CCDirector::get()->getWinSize();
@@ -1162,31 +1193,37 @@ namespace {
         CCPoint w = pl->m_objectLayer->convertToWorldSpace(r.anchor);
         float sx = io.DisplaySize.x / win.width, sy = io.DisplaySize.y / win.height;
 
-        static constexpr float kTiers[4] = { 60.f, 120.f, 144.f, 240.f };
-        float lowSafe = 0.f;                          // lowest tier that is guaranteed
-        int status[4];                                // 2 guaranteed, 1 possible, 0 no
-        for (int i = 0; i < 4; ++i) {
-            float need = r.stepHz / kTiers[i];
-            if (r.width > 0 && r.width >= static_cast<int>(std::ceil(need - 1e-4f))) status[i] = 2;
-            else if (r.width > 0 && r.hit) status[i] = 1;
+        static constexpr int kTiers[3] = { 60, 120, 240 };
+        int tier = r.window ? ckyFwTier(r.width, r.stepHz) : 0;
+        int status[3];                                // 2 guaranteed, 1 possible, 0 no
+        for (int i = 0; i < 3; ++i) {
+            int need = std::max(1, static_cast<int>(std::ceil(r.stepHz / kTiers[i] - 1e-4f)));
+            if (r.window && r.width >= need) status[i] = 2;
+            else if (r.window && r.hit) status[i] = 1;
             else status[i] = 0;
-            if (status[i] == 2 && lowSafe == 0.f) lowSafe = kTiers[i];
         }
 
-        char l1[64], l2[64];
+        ImU32 green = U(0.35f, 1.f, 0.45f, fade), red = U(1.f, 0.35f, 0.35f, fade), amber = U(1.f, 0.78f, 0.25f, fade);
+        char l1[48], l2[64];
         ImU32 accent;
-        if (r.hit) {
-            accent = U(0.35f, 1.f, 0.45f, fade);
-            if (lowSafe > 0.f) std::snprintf(l1, sizeof l1, "%s%d FPS window%s", r.truncated ? ">= " : "", static_cast<int>(lowSafe), r.incomplete ? " ~" : "");
-            else               std::snprintf(l1, sizeof l1, "> 240 FPS window");
-            std::snprintf(l2, sizeof l2, "%s%d step%s  %.1f ms", r.truncated ? ">= " : "", r.width, r.width == 1 ? "" : "s",
-                          1000.f * r.width / std::max(1.f, r.stepHz));
+        if (!done) {
+            accent = amber;
+            std::snprintf(l1, sizeof l1, "counting...");
+            if (counted < start) std::snprintf(l2, sizeof l2, "frames to click: %d", counted);
+            else                 std::snprintf(l2, sizeof l2, "frames to click: %d-%d", start, shownEnd);
+        } else if (r.hit) {
+            accent = green;
+            if (tier > 0) std::snprintf(l1, sizeof l1, "%s%d FW", r.truncated ? ">= " : "", tier);
+            else          std::snprintf(l1, sizeof l1, "> 240 FW");
+            std::snprintf(l2, sizeof l2, "frames to click: %d-%d", start, endv);
         } else {
-            accent = U(1.f, 0.35f, 0.35f, fade);
+            accent = red;
             std::snprintf(l1, sizeof l1, "MISSED");
-            if (r.hasNext) std::snprintf(l2, sizeof l2, "window %+d step%s away", r.next, std::abs(r.next) == 1 ? "" : "s");
-            else           std::snprintf(l2, sizeof l2, "no window in range");
+            if (ahead)            std::snprintf(l2, sizeof l2, "frames to click: %d-%d", start, endv);
+            else if (r.window)    std::snprintf(l2, sizeof l2, "window was %d frame%s ago", -endv, endv == -1 ? "" : "s");
+            else                  std::snprintf(l2, sizeof l2, "no window in range");
         }
+        bool showRow = done && r.window;
 
         ImDrawList* dl = ImGui::GetBackgroundDrawList();
         ImFont* font = ImGui::GetFont();
@@ -1194,16 +1231,16 @@ namespace {
         float pad = fs * 0.45f, gap = fs * 0.8f;
         ImVec2 s1 = font->CalcTextSizeA(fs, FLT_MAX, 0.f, l1);
         ImVec2 s2 = font->CalcTextSizeA(fs * 0.85f, FLT_MAX, 0.f, l2);
-        char tb[4][8];
-        ImVec2 ts[4];
+        char tb[3][8];
+        ImVec2 ts[3];
         float rowW = 0.f;
-        for (int i = 0; i < 4; ++i) {
-            std::snprintf(tb[i], sizeof tb[i], "%d", static_cast<int>(kTiers[i]));
+        for (int i = 0; i < 3; ++i) {
+            std::snprintf(tb[i], sizeof tb[i], "%d", kTiers[i]);
             ts[i] = font->CalcTextSizeA(fs * 0.8f, FLT_MAX, 0.f, tb[i]);
             rowW += ts[i].x + (i ? gap : 0.f);
         }
-        float bw = std::max({ s1.x, s2.x, rowW }) + pad * 2.f;
-        float bh = s1.y + s2.y + ts[0].y + pad * 2.f + fs * 0.2f;
+        float bw = std::max({ s1.x, s2.x, showRow ? rowW : 0.f }) + pad * 2.f;
+        float bh = s1.y + s2.y + (showRow ? ts[0].y + fs * 0.2f : 0.f) + pad * 2.f;
         ImVec2 tl(w.x * sx - bw * 0.5f, (win.height - w.y) * sy - bh - fs * 0.6f);
         tl.x = std::clamp(tl.x, 2.f, std::max(2.f, io.DisplaySize.x - bw - 2.f));
         tl.y = std::max(2.f, tl.y);
@@ -1214,16 +1251,15 @@ namespace {
         dl->AddText(font, fs, ImVec2(cx - s1.x * 0.5f, y), accent, l1);
         y += s1.y;
         dl->AddText(font, fs * 0.85f, ImVec2(cx - s2.x * 0.5f, y), U(0.85f, 0.85f, 0.85f, fade), l2);
-        y += s2.y + fs * 0.2f;
-        float x = cx - rowW * 0.5f;
-        for (int i = 0; i < 4; ++i) {
-            ImU32 col = status[i] == 2 ? U(0.35f, 1.f, 0.45f, fade)
-                      : status[i] == 1 ? U(1.f, 0.78f, 0.25f, fade) : U(1.f, 0.35f, 0.35f, fade);
-            dl->AddText(font, fs * 0.8f, ImVec2(x, y), col, tb[i]);
-            x += ts[i].x + gap;
-        }
-        if (r.perfect) {
-            dl->AddText(font, fs * 0.8f, ImVec2(tl.x + bw + fs * 0.3f, tl.y), U(1.f, 0.85f, 0.2f, fade), "PERFECT");
+        if (showRow) {
+            y += s2.y + fs * 0.2f;
+            float x = cx - rowW * 0.5f;
+            for (int i = 0; i < 3; ++i) {
+                ImU32 col = status[i] == 2 ? green : status[i] == 1 ? amber : red;
+                dl->AddText(font, fs * 0.8f, ImVec2(x, y), col, tb[i]);
+                x += ts[i].x + gap;
+            }
+            if (r.perfect) dl->AddText(font, fs * 0.8f, ImVec2(tl.x + bw + fs * 0.3f, tl.y), U(1.f, 0.85f, 0.2f, fade), "PERFECT");
         }
     }
 

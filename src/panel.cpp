@@ -462,14 +462,14 @@ namespace {
         static CCDrawNode* makeLaser(float w, float h) {
             auto d = CCDrawNode::create();
             float half = w / 2.f - 3.f;
-            for (int i = 0; i < 4; ++i) {
-                float off = 2.f + static_cast<float>(i) * 2.5f;
+            for (int i = 0; i < 4; ++i) {                       // soft bands, thicker than before, never overlapping
+                float off = 2.f + static_cast<float>(i) * 2.2f;
                 float a = 0.10f * (1.f - static_cast<float>(i) / 4.f);
-                d->drawSegment({ -half, off },  { half, off },  1.25f, pm(0.f, 1.f, 1.f, a));
-                d->drawSegment({ -half, -off }, { half, -off }, 1.25f, pm(0.f, 1.f, 1.f, a));
+                d->drawSegment({ -half, off },  { half, off },  1.8f, pm(0.f, 1.f, 1.f, a));
+                d->drawSegment({ -half, -off }, { half, -off }, 1.8f, pm(0.f, 1.f, 1.f, a));
             }
-            d->drawSegment({ -half, 0.f }, { half, 0.f }, 0.9f, pm(0.5f, 1.f, 1.f, 0.70f));
-            float travel = h / 2.f - 20.f;
+            d->drawSegment({ -half, 0.f }, { half, 0.f }, 1.6f, pm(0.5f, 1.f, 1.f, 0.70f));
+            float travel = h / 2.f - 12.f;                      // top edge to bottom edge of the window (bands stay inside it)
             d->setPosition({ 0.f, -travel });
             d->runAction(CCRepeatForever::create(CCSequence::create(
                 CCEaseSineInOut::create(CCMoveTo::create(3.8f, ccp(0.f, travel))),

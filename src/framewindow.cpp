@@ -21,6 +21,8 @@
 //   Physics runs at a fixed rate (240 steps/s). A click made at F FPS can only land on a frame boundary,
 //   which comes every 240/F steps. A window of W steps is therefore GUARANTEED at F FPS when
 //   W >= ceil(240/F), and only POSSIBLE (chance about W / (240/F)) below that.
+//   Tiers shown: 60 / 120 / 240 FPS  (1 step = 240 FW, 2-3 steps = 120 FW, 4+ steps = 60 FW).
+//   The result is computed at once (bounded, one bisection); the label then COUNTS it out slowly (fwSpeed).
 #include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 #include <array>
@@ -342,6 +344,7 @@ namespace {
             r.truncated = hiEdge || loEdge;
         }
         r.hit = hit;
+        r.window = anyWindow;
         r.perfect = hit && !r.truncated && r.width <= std::clamp(cky::fwPerfect, 1, 6);
         r.incomplete = c.timedOut;
         r.sims = c.sims;
@@ -443,6 +446,7 @@ void ckyFwSave() {
     m->setSavedValue<int>("fw-perfect", cky::fwPerfect);
     m->setSavedValue<int>("fw-vol", cky::fwVol);
     m->setSavedValue<float>("fw-scale", cky::fwScale);
+    m->setSavedValue<float>("fw-speed", cky::fwSpeed);
 }
 
 $on_mod(Loaded) {
@@ -456,6 +460,7 @@ $on_mod(Loaded) {
     cky::fwPerfect = std::clamp(m->getSavedValue<int>("fw-perfect", 1), 1, 6);
     cky::fwVol = std::clamp(m->getSavedValue<int>("fw-vol", 100), 0, 200);
     cky::fwScale = std::clamp(m->getSavedValue<float>("fw-scale", 1.f), 0.5f, 2.5f);
+    cky::fwSpeed = std::clamp(m->getSavedValue<float>("fw-speed", 0.5f), 0.25f, 2.f);
 }
 
 class $modify(CkyFwPlayLayer, PlayLayer) {

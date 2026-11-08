@@ -3,6 +3,7 @@
 #pragma once
 #include <Geode/Geode.hpp>
 #include <chrono>
+#include <cmath>
 
 struct CkyFwResult {
     bool valid = false;       // a calculation exists for the last click
@@ -10,6 +11,7 @@ struct CkyFwResult {
     bool truncated = false;   // the window reaches the edge of the tested range: real width is >= `width`
     bool incomplete = false;  // the time budget ran out; the result may be too optimistic
     bool perfect = false;     // hit, and the window is no wider than the "perfect" setting
+    bool window = false;      // any surviving window was found (hit, or `next` away)
     bool hasNext = false;     // missed click: `next` is the nearest step offset that would have survived
     int  lo = 0, hi = 0;      // window, in physics steps relative to the click (inclusive)
     int  width = 0;           // hi - lo + 1
@@ -31,12 +33,25 @@ namespace cky {
     inline int   fwPerfect = 1;     // "frame perfect" = window of at most this many steps (1-6)
     inline int   fwVol = 100;       // jingle volume, percent (0-200)
     inline float fwScale = 1.f;     // label size
-    inline float fwHold = 2.5f;     // seconds the label stays after a click
+    inline float fwHold = 2.5f;     // seconds the label stays once the count has finished
+    inline float fwSpeed = 0.5f;    // count speed: 1.0x = 20 frames counted per second, 0.5x = 10 per second
 
     inline double fwNow() {
         using C = std::chrono::steady_clock;
         return std::chrono::duration<double>(C::now().time_since_epoch()).count();
     }
+}
+
+// Lowest of 60 / 120 / 240 FPS at which a window of `width` steps is GUARANTEED to be hit (0 = none of them).
+// A frame at F FPS lands every stepHz / F steps, so the window must be at least that wide:
+//   1 step -> 240 FW, 2-3 steps -> 120 FW, 4+ steps -> 60 FW   (at 240 steps/s)
+inline int ckyFwTier(int width, float stepHz) {
+    static constexpr int kT[3] = { 60, 120, 240 };
+    for (int t : kT) {
+        int need = static_cast<int>(std::ceil(stepHz / static_cast<float>(t) - 1e-4f));
+        if (width >= std::max(1, need)) return t;
+    }
+    return 0;
 }
 
 void ckyFwCapture(GJBaseGameLayer* layer);                  // once per physics step (cheap ring snapshot)
