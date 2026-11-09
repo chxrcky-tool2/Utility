@@ -8,6 +8,8 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
+#include <zstd.h>
 #include <string>
 #include <vector>
 
@@ -102,6 +104,11 @@ namespace cky {
     constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes: position + rotation)
     constexpr uint32_t MAGIC4 = 0x34594B43; // "CKY4" (CKY3 + vertical velocity in frame fixes)
     constexpr uint32_t MAGIC5 = 0x35594B43; // "CKY5" (CKY4 + on-ground / dash / jump-buffer state in frame fixes)
+    // "CKZ5": a whole CKY5 file squeezed with Zstd. Layout: [magic][u32 raw size][zstd frame].
+    // The CKY5 payload inside is unchanged, so old CKY1-CKY5 files still load.
+    constexpr uint32_t MAGICZ = 0x355A4B43;
+    constexpr int ZSTD_LEVEL = 3;
+    inline bool compressSaves = true;
     constexpr int P2_FLAG = 0x100;
     constexpr uint32_t MAX_ENTRIES = 10000000;
     constexpr int MAX_SLOTS = 20;
@@ -141,6 +148,13 @@ namespace cky {
     inline bool     fpsOn = false;
     inline float    fps = 120.f;
     inline double   origInterval = 0.0;
+
+    // Headless physics (above 240 TPS): never let one frame spend more than headlessBudgetMs on physics.
+    // If the device can't keep up the game just runs a little slower than real time instead of
+    // freezing the frame, and the per-step display extras (hitbox trail, frame window) pause above 480 TPS.
+    inline bool     headless = true;
+    inline float    headlessBudgetMs = 12.f;   // 4-30 ms of physics per frame
+    inline float    stepCostMs = 0.02f;        // measured cost of one physics step (moving average)
 
     inline float    actualTps = 0.f;
     inline uint32_t measSteps = 0;
@@ -242,6 +256,7 @@ namespace cky {
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
     inline float effSpeed() { return (speedOn && speedBtns) ? speed : 1.f; }
+    inline bool  headlessActive() { return headless && effTps() > 240.f && !frozen; }
 
     inline double clockInc() {
         return static_cast<double>(macroTps) / static_cast<double>(effTps());
@@ -362,13 +377,13 @@ namespace cky {
     }
 
     // ---- file helpers ----
-    template <class T>
-    inline void wr(std::ofstream& f, T v) {
+    template <class T, class S>
+    inline void wr(S& f, T v) {
         f.write(reinterpret_cast<char const*>(&v), sizeof(T));
     }
 
-    template <class T>
-    inline bool rd(std::ifstream& f, T& v) {
+    template <class T, class S>
+    inline bool rd(S& f, T& v) {
         f.read(reinterpret_cast<char*>(&v), sizeof(T));
         return static_cast<bool>(f);
     }
@@ -468,8 +483,7 @@ namespace cky {
     }
 
     inline bool save() {
-        std::ofstream f(slotPath(), std::ios::binary | std::ios::trunc);
-        if (!f) return false;
+        std::ostringstream f(std::ios::binary);
         wr<uint32_t>(f, MAGIC5);
         wr<float>(f, macroTps);
         wr<uint32_t>(f, static_cast<uint32_t>(macro.size()));
@@ -490,7 +504,37 @@ namespace cky {
                 wr<double>(f, e->dashAngle); wr<double>(f, e->dashStart);
             }
         }
-        return f.good();
+        if (!f.good()) return false;
+        std::string raw = std::move(f).str();
+
+        // write to a temp file first so a crash never leaves a half-written macro
+        auto path = slotPath();
+        auto tmp = path; tmp += ".tmp";
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            if (!out) return false;
+            bool zipped = false;
+            if (compressSaves && raw.size() > 64) {
+                std::string z(ZSTD_compressBound(raw.size()), '\0');
+                size_t n = ZSTD_compress(z.data(), z.size(), raw.data(), raw.size(), ZSTD_LEVEL);
+                if (!ZSTD_isError(n) && n + 8 < raw.size()) {
+                    wr<uint32_t>(out, MAGICZ);
+                    wr<uint32_t>(out, static_cast<uint32_t>(raw.size()));
+                    out.write(z.data(), static_cast<std::streamsize>(n));
+                    zipped = true;
+                    log::info("[cky] saved macro: {} -> {} bytes (zstd {})", raw.size(), n + 8, ZSTD_LEVEL);
+                }
+            }
+            if (!zipped) out.write(raw.data(), static_cast<std::streamsize>(raw.size()));
+            if (!out.good()) return false;
+        }
+        std::error_code ec;
+        std::filesystem::rename(tmp, path, ec);
+        if (ec) { // some Android filesystems refuse to replace: remove then rename
+            std::filesystem::remove(path, ec);
+            std::filesystem::rename(tmp, path, ec);
+        }
+        return !ec;
     }
 
     inline bool load() {
@@ -507,8 +551,30 @@ namespace cky {
             else p = Mod::get()->getSaveDir() / "macro.cky";
         }
 
-        std::ifstream f(p, std::ios::binary);
-        if (!f) return false;
+        std::string bytes;
+        {
+            std::ifstream in(p, std::ios::binary);
+            if (!in) return false;
+            std::ostringstream ss;
+            ss << in.rdbuf();
+            bytes = std::move(ss).str();
+        }
+        if (bytes.size() >= 8) {
+            uint32_t m0 = 0, rawSize = 0;
+            std::memcpy(&m0, bytes.data(), 4);
+            if (m0 == MAGICZ) {
+                std::memcpy(&rawSize, bytes.data() + 4, 4);
+                if (rawSize == 0 || rawSize > 1024u * 1024u * 1024u) return false; // 1 GB sanity cap
+                std::string raw(rawSize, '\0');
+                size_t n = ZSTD_decompress(raw.data(), raw.size(), bytes.data() + 8, bytes.size() - 8);
+                if (ZSTD_isError(n) || n != rawSize) {
+                    log::error("[cky] macro decompress failed: {}", ZSTD_isError(n) ? ZSTD_getErrorName(n) : "size mismatch");
+                    return false;
+                }
+                bytes = std::move(raw);
+            }
+        }
+        std::istringstream f(bytes, std::ios::binary);
 
         uint32_t magic = 0, count = 0;
         float t = 240.f;
