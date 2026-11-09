@@ -1,5 +1,6 @@
 // main.cpp — ChxrCky Macro Bot — game hooks
 #include "state.hpp"
+#include "render/ChxrRender.hpp"
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 #include <chrono>
@@ -285,12 +286,14 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
                 if (sp != 1.f) dt *= sp;
                 // headless physics: cap this frame's catch-up to what the device can run in the budget
-                if (cky::headlessActive()) {
+                if (cky::headlessActive() && !chxr::Renderer::get().rendering()) {
                     double cost = std::max(0.002, static_cast<double>(cky::stepCostMs));
                     double maxSteps = std::max(60.0, static_cast<double>(std::clamp(cky::headlessBudgetMs, 4.f, 30.f)) / cost);
                     float maxDt = static_cast<float>(maxSteps / static_cast<double>(cky::effTps()));
                     if (dt > maxDt) dt = maxDt;
                 }
+                // rendering: fixed timestep, one game update per video frame (TPS/fps physics steps)
+                if (chxr::Renderer::get().rendering()) dt = 1.f / static_cast<float>(chxr::Renderer::get().fps());
                 cky::measTime += realDt * sp;
                 if (cky::measTime >= 0.5f) {
                     cky::actualTps = static_cast<float>(cky::measSteps) / cky::measTime;
@@ -597,6 +600,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
         }
 
         PlayLayer::resetLevel();
+        chxr::Renderer::get().onRestart();
         ckyRunBegin(); // labels: a new attempt starts here (level start, startpos or checkpoint)
         ckyBackStepClear();
         ckyInputLogReset();
@@ -670,6 +674,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
             this->resetLevel();
             return;
         }
+        chxr::Renderer::get().notePlayerEnded(3);
         PlayLayer::levelComplete();
     }
 };

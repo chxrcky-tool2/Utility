@@ -1,6 +1,7 @@
 // imgui_ui.cpp
 #include "state.hpp"
 #include "fx.hpp"
+#include "render/ChxrRender.hpp"
 
 #if __has_include(<imgui-cocos.hpp>)
 
@@ -910,6 +911,13 @@ namespace {
             else { cky::tps = t2; cky::tpsOn = true; cky::resetMeasure(); }
         }
 
+        fxCheckbox("Headless physics (above 240 TPS)", &cky::headless);
+        if (cky::headless) {
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
+            ImGui::SliderFloat("Physics ms per frame", &cky::headlessBudgetMs, 4.f, 30.f, "%.0f ms");
+        }
+        if (cky::actualTps > 0.f) ImGui::Text("Real TPS: %d / %d", static_cast<int>(cky::actualTps + 0.5f), static_cast<int>(cky::effTps()));
+
         if (fxButton(fmt::format("Step size: {}", static_cast<int>(cky::tpsStep)).c_str())) {
             float n = cky::nextVal(cky::tpsStepList, cky::tpsStep, 1);
             if (n == cky::tpsStep) n = cky::tpsStepList.front();
@@ -1129,6 +1137,71 @@ namespace {
         ImGui::TextDisabled("with player1/clicks, releases, softclicks...");
     }
 
+    void tabRendering() {
+        auto& R = chxr::Renderer::get();
+        if (!R.available()) {
+            ImGui::TextWrapped("Rendering needs the FFmpeg API mod (eclipse.ffmpeg-api, Android). Install it and restart the game.");
+        }
+        float w = ImGui::GetContentRegionAvail().x * 0.55f;
+
+        // codec: pick from what FFmpeg API reports, or type one if it reports nothing
+        auto codecs = chxr::Renderer::codecs();
+        ImGui::SetNextItemWidth(w);
+        if (!codecs.empty()) {
+            if (ImGui::BeginCombo("Codec", R.cfg.codec.empty() ? "auto" : R.cfg.codec.c_str())) {
+                for (auto const& c : codecs) {
+                    if (ImGui::Selectable(c.c_str(), c == R.cfg.codec)) { R.cfg.codec = c; R.save(); }
+                }
+                ImGui::EndCombo();
+            }
+        } else {
+            static char codecBuf[64] = {};
+            static bool codecInit = false;
+            if (!codecInit) { std::snprintf(codecBuf, sizeof codecBuf, "%s", R.cfg.codec.c_str()); codecInit = true; }
+            if (ImGui::InputText("Codec", codecBuf, sizeof codecBuf)) { R.cfg.codec = codecBuf; R.save(); }
+        }
+
+        // filters (FFmpeg -vf style string; the API has no free-form args field)
+        static char filtBuf[256] = {};
+        static bool filtInit = false;
+        if (!filtInit) { std::snprintf(filtBuf, sizeof filtBuf, "%s", R.cfg.filters.c_str()); filtInit = true; }
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::InputText("Filters (-vf)", filtBuf, sizeof filtBuf)) { R.cfg.filters = filtBuf; R.save(); }
+
+        static char nameBuf[64] = {};
+        static bool nameInit = false;
+        if (!nameInit) { std::snprintf(nameBuf, sizeof nameBuf, "%s", R.cfg.name.c_str()); nameInit = true; }
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::InputText("File name", nameBuf, sizeof nameBuf)) { R.cfg.name = nameBuf; R.save(); }
+
+        // resolution: capped at 1080p
+        static char const* resNames[4] = { "1920x1080", "1280x720", "854x480", "640x360" };
+        int ri = R.resIndex();
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::Combo("Resolution", &ri, resNames, 4)) { R.setRes(ri); R.save(); }
+
+        int fps = R.cfg.fps;
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::SliderInt("FPS", &fps, 1, 30)) { R.cfg.fps = fps; R.save(); }
+        int br = R.cfg.bitrateMbps;
+        ImGui::SetNextItemWidth(w);
+        if (ImGui::SliderInt("Bitrate (Mbps)", &br, 1, 60)) { R.cfg.bitrateMbps = br; R.save(); }
+
+        ImGui::Separator();
+        if (R.rendering()) {
+            ImGui::Text("Rendering: %llu frames (%.1fs)", static_cast<unsigned long long>(R.frames()),
+                static_cast<double>(R.frames()) / static_cast<double>(std::max(1, R.fps())));
+            if (fxButton("Stop render")) R.cancel();
+        } else if (R.phase() == chxr::Renderer::Phase::Armed) {
+            ImGui::Text("Armed: restart the level to begin");
+            if (fxButton("Disarm")) R.cancel();
+        } else {
+            if (fxButton("Start render (arm)")) R.arm();
+            ImGui::TextDisabled("Arm, then restart the level. Video saves to the");
+            ImGui::TextDisabled("mod config folder / Renders. Max 1080p, 30 FPS.");
+        }
+    }
+
     void tabSettings() {
         float is = cky::iconScale;
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
@@ -1289,6 +1362,7 @@ namespace {
                 if (ImGui::BeginTabItem("Display"))  { tabDisplay();  ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Labels"))   { tabLabels();   ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Clicks"))   { tabClicks();   ImGui::EndTabItem(); }
+                if (ImGui::BeginTabItem("Rendering (Beta)")) { tabRendering(); ImGui::EndTabItem(); }
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();
             }

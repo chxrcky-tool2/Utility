@@ -1,6 +1,7 @@
 // panel.cpp — menu: themes (see themes.hpp), 6 tabs, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
 #include "fx.hpp"
+#include "render/ChxrRender.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace {
@@ -69,6 +70,17 @@ namespace {
         T_LBL_FPS = 250, T_LBL_RUN, T_LBL_TIME, T_LBL_BEST,
         PAGE_LABELS = 8
     };
+
+    // Rendering (Beta) tab: page 9
+    enum : int {
+        B_RN_CODEC_DN = 300, B_RN_CODEC_UP, B_RN_RES_DN, B_RN_RES_UP, B_RN_FPS_DN, B_RN_FPS_UP,
+        B_RN_BR_DN, B_RN_BR_UP, B_RN_START, B_RN_STOP,
+        L_RN_CODEC = 320, L_RN_RES, L_RN_FPS, L_RN_BR, L_RN_FILT, L_RN_STATUS, L_RN_HINT,
+        PAGE_RENDER = 9
+    };
+
+    // headless physics rows (Global tab)
+    enum : int { T_HEADLESS = 330, B_HB_DN, B_HB_UP, L_HB = 335, L_REALTPS };
 
     // row label of a toggle row = LBL_TAGS + the toggle's tag (Cyber tints it cyan / grey)
     enum : int { LBL_TAGS = 1000 };
@@ -1034,11 +1046,11 @@ public:
         m_tabMenu = CCMenu::create();
         m_tabMenu->setPosition({0.f, 0.f});
         this->addChild(m_tabMenu, 4);
-        static char const* names[7] = { "Bot", "Global", "Player", "Display", "Labels", "Clicks", "Settings" };
-        static int const pages[7]   = { 0, 1, 2, 3, PAGE_LABELS, 4, 5 };
-        for (int i = 0; i < 7; ++i) {
+        static char const* names[8] = { "Bot", "Global", "Player", "Display", "Labels", "Clicks", "Rendering", "Settings" };
+        static int const pages[8]   = { 0, 1, 2, 3, PAGE_LABELS, 4, PAGE_RENDER, 5 };
+        for (int i = 0; i < 8; ++i) {
             makeBtn(m_tabMenu, menu_selector(CkyPanel::onTab), TAB_BASE + pages[i],
-                    -149.f, 64.f - 27.f * static_cast<float>(i), 104.f, 24.f, names[i], kTab, 0.4f);
+                    -149.f, 66.f - 24.f * static_cast<float>(i), 104.f, 21.f, names[i], kTab, 0.37f);
         }
 
         auto closeMenu = CCMenu::create();
@@ -1075,8 +1087,8 @@ public:
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_UP, 112.f, 113.f, 38.f, 18.f, "Up", kAccent, 0.35f);
         makeBtn(m_scrollMenu, menu_selector(CkyPanel::onScroll), S_DN, 156.f, 113.f, 38.f, 18.f, "Dn", kAccent, 0.35f);
 
-        static char const* names[9] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
-                                        "HUD settings", "Hitbox trail", "Labels" };
+        static char const* names[10] = { "Bot", "Global", "Player", "Display", "Clicks", "Settings",
+                                         "HUD settings", "Hitbox trail", "Labels", "Rendering (Beta)" };
         auto head = CCLabelBMFont::create(names[tab], "bigFont.fnt");
         head->setScale(0.5f);
         head->setAnchorPoint({0.f, 0.5f});
@@ -1110,6 +1122,9 @@ public:
             rowValue("TPS (1-6000)", B_TPS_DN, B_TPS_UP, L_TPS);
             rowValue("TPS step", B_TSTEP_DN, B_TSTEP_UP, L_TSTEP);
             rowWide("High TPS", B_HIGH);
+            rowPill("Headless physics", T_HEADLESS);
+            rowValue("Physics ms/frame", B_HB_DN, B_HB_UP, L_HB);
+            rowInfo(L_REALTPS);
             rowPill("Speedhack", T_SPEED);
             rowValue("Speed", B_SPD_DN, B_SPD_UP, L_SPEED);
             rowPill("Audio follows speed", T_AUDIO);
@@ -1175,12 +1190,23 @@ public:
             rowPill("Level time", T_LBL_TIME);
             rowPill("Best run", T_LBL_BEST);
             break;
+        case PAGE_RENDER:
+            rowInfo(L_RN_STATUS);
+            rowValue("Codec", B_RN_CODEC_DN, B_RN_CODEC_UP, L_RN_CODEC);
+            rowValue("Resolution", B_RN_RES_DN, B_RN_RES_UP, L_RN_RES);
+            rowValue("FPS (max 30)", B_RN_FPS_DN, B_RN_FPS_UP, L_RN_FPS);
+            rowValue("Bitrate Mbps", B_RN_BR_DN, B_RN_BR_UP, L_RN_BR);
+            rowInfo(L_RN_FILT);
+            rowWide("Start render (arm)", B_RN_START);
+            rowWide("Stop render", B_RN_STOP);
+            rowInfo(L_RN_HINT);
+            break;
         default:
             rowValue("Cky icon size", B_ICONSZ_DN, B_ICONSZ_UP, L_ICONSZ);
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
             rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
-            rowText("ChxrCky Macro Bot v1.0.5");
+            rowText("ChxrCky Macro Bot v1.0.6");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
@@ -1199,7 +1225,7 @@ public:
 
     void refreshTabs() {
         int active = (m_tab == 6 || m_tab == 7) ? 3 : m_tab; // HUD settings / Hitbox trail belong to Display
-        for (int i = 0; i <= PAGE_LABELS; ++i) {
+        for (int i = 0; i <= PAGE_RENDER; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
             paint(it, i == active ? kAccent : kTab);
         }
@@ -1227,6 +1253,11 @@ public:
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
         setPill(T_PFIX, cky::practiceFixes);
+        setPill(T_HEADLESS, cky::headless);
+        setText(L_HB, fmt::format("{:.0f}", cky::headlessBudgetMs));
+        setText(L_REALTPS, cky::actualTps > 0.f
+            ? fmt::format("Real TPS: {} / {}", static_cast<int>(cky::actualTps + 0.5f), static_cast<int>(cky::effTps()))
+            : std::string("Real TPS: (play a level)"));
         setPill(T_LBL_FPS, cky::lblFps);
         setPill(T_LBL_RUN, cky::lblRun);
         setPill(T_LBL_TIME, cky::lblTime);
@@ -1275,6 +1306,22 @@ public:
                 size_t len = std::strlen(thm().name);
                 l->setScale(len > 8 ? 0.4f * 8.f / static_cast<float>(len) : 0.4f);
             }
+        }
+
+        {
+            auto& R = chxr::Renderer::get();
+            std::string codec = R.cfg.codec.empty() ? std::string("auto") : R.cfg.codec;
+            setText(L_RN_CODEC, codec.size() > 9 ? codec.substr(0, 8) + "~" : codec);
+            setText(L_RN_RES, fmt::format("{}p", R.cfg.height));
+            setText(L_RN_FPS, fmt::format("{}", R.cfg.fps));
+            setText(L_RN_BR, fmt::format("{}", R.cfg.bitrateMbps));
+            setText(L_RN_FILT, R.cfg.filters.empty() ? std::string("Filters: none (edit in ImGui menu)")
+                                                     : "Filters: " + R.cfg.filters.substr(0, 22));
+            std::string st = !R.available() ? "Needs the FFmpeg API mod"
+                : R.rendering() ? fmt::format("Rendering... {} frames", R.frames())
+                : R.phase() == chxr::Renderer::Phase::Armed ? "Armed: restart the level" : "Idle";
+            setText(L_RN_STATUS, st);
+            setText(L_RN_HINT, "Arm, then restart the level to begin.");
         }
 
         retext(findBtn(B_HIGH), (cky::tpsOn && cky::tps >= 480.f)
@@ -1391,6 +1438,9 @@ public:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::frameFixes = !cky::frameFixes;
             break;
+        case T_HEADLESS:
+            cky::headless = !cky::headless;
+            break;
         case T_PFIX:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::practiceFixes = !cky::practiceFixes;
@@ -1456,6 +1506,35 @@ public:
             return;
         }
         switch (t) {
+        case B_HB_DN:
+        case B_HB_UP:
+            cky::headlessBudgetMs = std::clamp(cky::headlessBudgetMs + (t == B_HB_UP ? 2.f : -2.f), 4.f, 30.f);
+            break;
+        case B_RN_CODEC_DN:
+        case B_RN_CODEC_UP: {
+            auto list = chxr::Renderer::codecs();
+            if (list.empty()) { ckyNotify("No codecs: FFmpeg API mod missing", false); break; }
+            chxr::Renderer::get().cycleCodec(list, t == B_RN_CODEC_UP ? 1 : -1);
+            break;
+        }
+        case B_RN_RES_DN:
+        case B_RN_RES_UP:
+            chxr::Renderer::get().cycleRes(t == B_RN_RES_UP ? -1 : 1); // list runs big -> small
+            break;
+        case B_RN_FPS_DN:
+        case B_RN_FPS_UP:
+            chxr::Renderer::get().stepFps(t == B_RN_FPS_UP ? 1 : -1);
+            break;
+        case B_RN_BR_DN:
+        case B_RN_BR_UP:
+            chxr::Renderer::get().cycleBitrate(t == B_RN_BR_UP ? 1 : -1);
+            break;
+        case B_RN_START:
+            chxr::Renderer::get().arm();
+            break;
+        case B_RN_STOP:
+            chxr::Renderer::get().cancel();
+            break;
         case B_TRL_DN:
         case B_TRL_UP:
             cky::trailLen = std::clamp(cky::trailLen + (t == B_TRL_UP ? 20 : -20), 20, 1200);
