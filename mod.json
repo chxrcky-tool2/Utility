@@ -5,9 +5,17 @@
   },
   "id": "chxrcky.cky",
   "name": "ChxrCky",
-  "version": "v1.0.5",
+  "version": "v1.0.6",
   "developer": "ChxrCky",
   "description": "Lightweight .cky macro recorder/player.",
+  "tags": ["cheat", "utility", "interface"],
+  "dependencies": {
+    "eclipse.ffmpeg-api": {
+      "version": ">=v2.0.0",
+      "importance": "suggested",
+      "platforms": ["android"]
+    }
+  },
   "settings": {
     "ui-mode": {
       "name": "Menu style",
