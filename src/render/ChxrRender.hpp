@@ -1,9 +1,9 @@
 // ChxrRender.hpp - ChxrCky 1.0.6 Rendering (Beta)
-// Talks to eclipse.ffmpeg-api through its events.hpp (copy it from that mod's repo into
-// src/render/ffmpeg_events.hpp). Hard caps: 1920x1080, 30 FPS.
+// Talks to eclipse.ffmpeg-api through the header its mod.json dependency provides. Hard caps: 1920x1080, 30 FPS.
 //
-// Flow: arm() -> level restart calls onRestart() -> each video frame you run
-// ticksForNextFrame(tps) physics ticks, then captureFrame() (called from CCDirector::drawScene).
+// Flow: arm() -> level restart calls onRestart() -> while rendering, update() uses a fixed dt of
+// 1/fps (so each game update = one video frame, TPS/fps physics steps) and CCDirector::drawScene
+// calls captureFrame().
 // Frames go to a bounded queue; a worker thread feeds FFmpeg so physics never waits on encoding
 // except when the queue is full (back-pressure, keeps RAM flat on Android).
 #pragma once
@@ -15,7 +15,15 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-#include "ffmpeg_events.hpp"
+
+// The header ships with the eclipse.ffmpeg-api dependency declared in mod.json (Android only).
+// Without it the renderer compiles as a stub and the tab says the API mod is missing.
+#if __has_include(<eclipse.ffmpeg-api/include/events.hpp>)
+#include <eclipse.ffmpeg-api/include/events.hpp>
+#define CKY_FFMPEG 1
+#else
+#define CKY_FFMPEG 0
+#endif
 
 namespace chxr {
 
@@ -28,18 +36,71 @@ struct RenderCfg {
     std::string name = "render";
 };
 
-class Renderer {
+// settings, presets and persistence shared by the Cocos panel and the ImGui menu
+class RenderUi {
+public:
+    RenderCfg cfg;
+
+    static constexpr int kResW[4] = { 1920, 1280, 854, 640 };
+    static constexpr int kResH[4] = { 1080, 720, 480, 360 };
+    static constexpr int kRates[9] = { 2, 4, 8, 12, 15, 20, 30, 40, 60 };
+
+    int resIndex() const {
+        for (int i = 0; i < 4; ++i) if (cfg.width == kResW[i] && cfg.height == kResH[i]) return i;
+        return 0;
+    }
+    void setRes(int i) { i = std::clamp(i, 0, 3); cfg.width = kResW[i]; cfg.height = kResH[i]; }
+    void cycleRes(int d) { setRes(resIndex() + d); save(); }
+    void stepFps(int d) { cfg.fps = std::clamp(cfg.fps + d, 1, 30); save(); }
+    void cycleBitrate(int d) {
+        int idx = 0;
+        for (int i = 0; i < 9; ++i) if (kRates[i] <= cfg.bitrateMbps) idx = i;
+        cfg.bitrateMbps = kRates[std::clamp(idx + d, 0, 8)];
+        save();
+    }
+    void cycleCodec(std::vector<std::string> const& list, int d) {
+        if (list.empty()) return;
+        int idx = 0;
+        for (int i = 0; i < static_cast<int>(list.size()); ++i) if (list[i] == cfg.codec) idx = i;
+        int n = static_cast<int>(list.size());
+        cfg.codec = list[((idx + d) % n + n) % n];
+        save();
+    }
+
+    void load() {
+        auto* m = geode::Mod::get();
+        cfg.codec = m->getSavedValue<std::string>("rn-codec", cfg.codec);
+        cfg.filters = m->getSavedValue<std::string>("rn-filters", cfg.filters);
+        cfg.name = m->getSavedValue<std::string>("rn-name", cfg.name);
+        setRes(m->getSavedValue<int>("rn-res", 0));
+        cfg.fps = std::clamp(m->getSavedValue<int>("rn-fps", 30), 1, 30);
+        cfg.bitrateMbps = std::clamp(m->getSavedValue<int>("rn-bitrate", 15), 1, 60);
+    }
+    void save() {
+        auto* m = geode::Mod::get();
+        m->setSavedValue<std::string>("rn-codec", cfg.codec);
+        m->setSavedValue<std::string>("rn-filters", cfg.filters);
+        m->setSavedValue<std::string>("rn-name", cfg.name);
+        m->setSavedValue<int>("rn-res", resIndex());
+        m->setSavedValue<int>("rn-fps", cfg.fps);
+        m->setSavedValue<int>("rn-bitrate", cfg.bitrateMbps);
+    }
+};
+
+#if CKY_FFMPEG
+class Renderer : public RenderUi {
 public:
     enum class Phase { Idle, Armed, Rendering };
-    static Renderer& get() { static Renderer r; return r; }
+    static Renderer& get() { static Renderer r; r.loadOnce(); return r; }
 
-    RenderCfg cfg;
+    ~Renderer() { release(); }
     Phase phase() const { return m_phase; }
     bool rendering() const { return m_phase == Phase::Rendering; }
     uint64_t frames() const { return m_frames; }
     int fps() const { return m_fps; }
 
     static bool available() { return geode::Loader::get()->isModLoaded("eclipse.ffmpeg-api"); }
+    void loadOnce() { if (!m_loaded) { m_loaded = true; load(); } }
     static std::vector<std::string> codecs() {
         return available() ? ffmpeg::events::Recorder::getAvailableCodecs() : std::vector<std::string>{};
     }
@@ -86,6 +147,7 @@ public:
 private:
     static constexpr size_t kMaxQueued = 4, kMaxSpare = 2;
     Phase m_phase = Phase::Idle;
+    bool m_loaded = false;
     std::unique_ptr<ffmpeg::events::Recorder> m_enc;
     geode::Ref<cocos2d::CCRenderTexture> m_rt;
     std::filesystem::path m_out;
@@ -188,7 +250,7 @@ private:
         m_enc = std::make_unique<ffmpeg::events::Recorder>();
         if (!m_enc->isValid()) { fail("FFmpeg API didn't answer (restart the game)"); return; }
         auto r = m_enc->init(s);
-        if (!r) { fail(r.unwrapErr()); return; }
+        if (r.isErr()) { fail(r.unwrapErr()); return; }
 
         m_rt = cocos2d::CCRenderTexture::create(m_w, m_h, cocos2d::kCCTexture2DPixelFormat_RGBA8888);
         if (!m_rt) { fail("couldn't create render texture"); return; }
@@ -214,5 +276,29 @@ private:
         say(fmt::format("Saved {} ({:.1f}s, {})", name, double(frames) / fps, why));
     }
 };
+
+#else // no FFmpeg API header: same surface, does nothing
+class Renderer : public RenderUi {
+public:
+    enum class Phase { Idle, Armed, Rendering };
+    static Renderer& get() { static Renderer r; r.loadOnce(); return r; }
+    Phase phase() const { return Phase::Idle; }
+    bool rendering() const { return false; }
+    uint64_t frames() const { return 0; }
+    int fps() const { return cfg.fps; }
+    static bool available() { return false; }
+    static std::vector<std::string> codecs() { return {}; }
+    void loadOnce() { if (!m_loaded) { m_loaded = true; load(); } }
+    void arm() {
+        geode::Notification::create("Rendering needs the FFmpeg API mod (Android)", geode::NotificationIcon::Error)->show();
+    }
+    void cancel() {}
+    void onRestart() {}
+    void notePlayerEnded(int) {}
+    void captureFrame() {}
+private:
+    bool m_loaded = false;
+};
+#endif
 
 } // namespace chxr
