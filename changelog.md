@@ -5,7 +5,7 @@ All notable changes to the ChxrCky Macro Bot project will be documented in this 
 ### Added
 - **CKZ5 compressed macros:** saves are CKY5 data squeezed with Zstd level 3 (written via a temp file, then renamed). Loads decompress automatically; old CKY1-CKY5 files still load.
 - **Headless physics (above 240 TPS):** each frame's physics is capped by a time budget (default 12 ms) so the frame never freezes; the game runs slightly slower than real time if the device can't keep up. Hitbox trail / frame window capture pause above 480 TPS.
-- **Renderer module (beta, not wired yet):** `src/render/ChxrRender.hpp` (FFmpeg API, max 1080p / 30 FPS).
+- **Rendering (Beta) tab** in both the Cocos panel and the ImGui menu: codec, filters (ImGui), resolution, FPS and bitrate, Start/Stop. Uses the eclipse.ffmpeg-api mod (Android), capped at 1080p / 30 FPS. Arm it, then restart the level; it records with a fixed timestep (one game update per video frame) until the level ends, you stop it, or you restart. Videos go to the mod config folder under Renders.
 
 ## [1.0.5]
 ### Added
