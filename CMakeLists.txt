@@ -17,13 +17,21 @@ endif()
 
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
-# GDR import (optional): delete these two lines if the build complains about the library
-CPMAddPackage("gh:maxnut/GDReplayFormat#gdr2")
-target_link_libraries(${PROJECT_NAME} libGDR)
+# Third-party libraries that were written for Geode 5 and may not build against Geode 6 alpha yet.
+# If CI fails inside one of them, turn that option OFF (the source files already compile to stubs
+# without the library: no GDR import / no ImGui menu, the Cocos menu stays).
+option(CKY_GDR   "Import .gdr replays (libGDR)"        ON)
+option(CKY_IMGUI "ImGui menu (gd-imgui-cocos)"          ON)
 
-# ImGui menu (optional): remove the "#" on the next two lines to enable it
-CPMAddPackage("gh:matcool/gd-imgui-cocos#geode")
-target_link_libraries(${PROJECT_NAME} imgui-cocos)
+if (CKY_GDR)
+    CPMAddPackage("gh:maxnut/GDReplayFormat#gdr2")
+    target_link_libraries(${PROJECT_NAME} libGDR)
+endif()
+
+if (CKY_IMGUI)
+    CPMAddPackage("gh:matcool/gd-imgui-cocos#geode")
+    target_link_libraries(${PROJECT_NAME} imgui-cocos)
+endif()
 
 # Zstd (CKZ5 macro compression)
 CPMAddPackage(
@@ -35,5 +43,10 @@ CPMAddPackage(
 )
 target_link_libraries(${PROJECT_NAME} libzstd_static)
 target_include_directories(${PROJECT_NAME} PRIVATE ${zstd_SOURCE_DIR}/lib)
+
+# Built-in renderer: Android hardware encoder + MP4 muxer from the NDK (no other mod needed)
+if (ANDROID)
+    target_link_libraries(${PROJECT_NAME} mediandk)
+endif()
 
 setup_geode_mod(${PROJECT_NAME})

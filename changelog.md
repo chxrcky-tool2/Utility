@@ -2,10 +2,13 @@
 All notable changes to the ChxrCky Macro Bot project will be documented in this file.
 
 ## [1.0.6] (in progress)
+### Changed
+- **Port to Geometry Dash 2.2091 / Geode 6.0.0-alpha.1 (developer alpha).** `mod.json` targets Geode 6.0.0-alpha.1 and GD 2.2091; paths coming from Geode (`getSaveDir`, `getConfigDir`, `getResourcesDir`, `dirs::getGameDir`) are converted from `asp::fs::Path` once in `src/compat_v6.hpp`; `gd::vector` in the trajectory collision hook is now `std::vector`; headers that Geode v6 no longer includes for us are included explicitly; CI builds against SDK `v6.0.0-alpha.1`. Not yet verified in-game.
+
 ### Added
 - **CKZ5 compressed macros:** saves are CKY5 data squeezed with Zstd level 3 (written via a temp file, then renamed). Loads decompress automatically; old CKY1-CKY5 files still load.
 - **Headless physics (above 240 TPS):** each frame's physics is capped by a time budget (default 12 ms) so the frame never freezes; the game runs slightly slower than real time if the device can't keep up. Hitbox trail / frame window capture pause above 480 TPS.
-- **Rendering (Beta) tab** in both the Cocos panel and the ImGui menu: codec, filters (ImGui), resolution, FPS and bitrate, Start/Stop. Uses the eclipse.ffmpeg-api mod (Android), capped at 1080p / 30 FPS. Arm it, then restart the level; it records with a fixed timestep (one game update per video frame) until the level ends, you stop it, or you restart. Videos go to the mod config folder under Renders.
+- **Rendering (Beta) tab** in both the Cocos panel and the ImGui menu: codec, filters (ImGui), resolution, FPS and bitrate, Start/Stop. Uses a built-in Android encoder (MediaCodec H.264 / HEVC to MP4, no dependency mod; video only, no audio), capped at 1080p / 30 FPS. Encoded height is rounded up to a multiple of 16 (1080p is saved as 1920x1088 with black bottom rows). The ImGui "Filters" box is gone because the encoder has no filter chain. New **Help** button in the Rendering tab (Cocos panel and ImGui) reads the phone chipset from Android system properties and sets the render width/height (weak chips 480p, mid chips 720p, fast chips 1080p; unknown chips get 720p). It logs the properties it read. Arm it, then restart the level; it records with a fixed timestep (one game update per video frame) until the level ends, you stop it, or you restart. Videos go to the mod config folder under Renders.
 
 ## [1.0.5]
 ### Added
