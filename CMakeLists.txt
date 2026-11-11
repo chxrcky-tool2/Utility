@@ -6,7 +6,13 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(ChxrCkyBot VERSION 1.0.6)
 
-file(GLOB SOURCES src/*.cpp)
+# Optional third-party libraries (written for Geode 5, may not build on Geode 6 alpha yet).
+# If CI fails inside one of them, set that option to OFF. The source files compile to stubs
+# without the library: no GDR import / no ImGui menu, the Cocos menu stays.
+option(CKY_GDR   "Import .gdr replays (libGDR)"   ON)
+option(CKY_IMGUI "ImGui menu (gd-imgui-cocos)"    ON)
+
+file(GLOB SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_library(${PROJECT_NAME} SHARED ${SOURCES})
 
 if (NOT DEFINED ENV{GEODE_SDK})
@@ -16,12 +22,6 @@ else()
 endif()
 
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
-
-# Third-party libraries that were written for Geode 5 and may not build against Geode 6 alpha yet.
-# If CI fails inside one of them, turn that option OFF (the source files already compile to stubs
-# without the library: no GDR import / no ImGui menu, the Cocos menu stays).
-option(CKY_GDR   "Import .gdr replays (libGDR)"        ON)
-option(CKY_IMGUI "ImGui menu (gd-imgui-cocos)"          ON)
 
 if (CKY_GDR)
     CPMAddPackage("gh:maxnut/GDReplayFormat#gdr2")
