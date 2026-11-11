@@ -1,4 +1,3 @@
-// imgui_ui.cpp
 #include "state.hpp"
 #include "fx.hpp"
 #include "render/ChxrRender.hpp"
@@ -26,9 +25,6 @@ namespace {
         return Mod::get()->getSettingValue<std::string>("ui-mode") == "ImGui";
     }
 
-    // ======================= theme effects: Cat (.meow) + Molten rocks (.lava) =======================
-    // Maths (particles, paw shape, caps) is in fx.hpp. Everything here is a few draw-list calls per frame:
-    // <= 8 click paws, <= 16 embers, 13 static background paws. Nothing is allocated.
     namespace fx = cky::fx;
     using fx::Kind;
     Kind curKind() { return fx::kindOf(cky::theme); }
@@ -40,22 +36,16 @@ namespace {
     void imPaw(ImDrawList* dl, float x, float y, float s, float rot, ImU32 col) {
         fx::pawDots(x, y, s, rot, [&](float px, float py, float r) { dl->AddCircleFilled(ImVec2(px, py), r, col, 10); });
     }
-    // chamfered ("hexagonal") corners; the 8 points run clockwise on screen, as ImGui wants
     void imChamfer(float x0, float y0, float x1, float y1, float c, ImVec2 (&o)[8]) {
         float f[8][2];
         fx::chamfer(x0, y0, x1, y1, c, f);
         for (int i = 0; i < 8; ++i) o[i] = ImVec2(f[i][0], f[i][1]);
     }
 
-    // heated-metal gradient: white-hot orange at the bottom, deep red-orange at the top
     ImU32 heatAt(float t /*0 top .. 1 bottom*/, float a) {
         return U(lerpf(0.85f, 1.00f, t), lerpf(0.20f, 0.62f, t), lerpf(0.05f, 0.14f, t), a);
     }
 
-    // Drop shadow behind the text of the menu window (extra edge contrast on the busy themed backgrounds; the menu body
-    // itself is always fully opaque). It copies the window's glyph triangles (the ones that are not the white pixel) into the
-    // BACKGROUND draw list, shifted by `off` px and tinted. So it sits behind the widgets, clipped to the window,
-    // and costs one buffer reserve + a copy of the text triangles. Nothing is allocated outside ImGui's own lists.
     void fxTextShadow(ImVec2 wp, ImVec2 ws, ImU32 rgb, float alphaMul, float off) {
         ImDrawList* src = ImGui::GetWindowDrawList();
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
@@ -94,16 +84,12 @@ namespace {
     fx::PawPool   g_paws;
     fx::EmberPool g_embers;
     Kind          g_lastKind = Kind::None;
-    constexpr float PAW_UNIT = 2.4f, EMBER_UNIT = 2.2f;   // the sim is written in 440x270 "Cocos px"; ImGui is bigger
+    constexpr float PAW_UNIT = 2.4f, EMBER_UNIT = 2.2f;
 
-    // ======================= Matrix (.glitch) + Cyber (.tech) =======================
-    // Cost per frame: Matrix = <= 24 x 7 rain characters; Cyber = ~70 grid lines + ~60 glow dots + the laser (3 calls).
-    // All state is fixed-size (RainSim) or kept in ImGui's own state storage; nothing is allocated.
     fx::RainSim g_rain;
-    float g_laserY = -1e9f;                                // screen y of the Cyber laser this frame (widgets light up near it)
-    constexpr float RAIN_UNIT = 13.f;                      // ImGui px per rain cell
+    float g_laserY = -1e9f;
+    constexpr float RAIN_UNIT = 13.f;
 
-    // label text where, now and then, one character swaps to a red or white symbol for a split second (Matrix)
     void mxLabel(ImDrawList* dl, ImVec2 pos, ImU32 col, char const* s, char const* end, ImGuiID id) {
         size_t len = end ? static_cast<size_t>(end - s) : std::strlen(s);
         fx::Glitch g = fx::glitchFor(id, ImGui::GetTime(), len);
@@ -121,15 +107,12 @@ namespace {
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
         float th = ImGui::GetFrameHeight();
-        // Solid black body (fully opaque: the menu never blends into the level behind it) with a very dark green title
-        // bar and a thin green rule under it. The text gets a drop shadow (fxTextShadow).
         bg->AddRectFilled(wp, wmax, IM_COL32(0, 0, 0, 255));
         bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), IM_COL32(0, 24, 8, 255));
         bg->AddLine(ImVec2(wp.x, wp.y + th + 0.5f), ImVec2(wmax.x, wp.y + th + 0.5f), U(0.f, 0.9f, 0.3f, 0.75f), 1.f);
 
-        // digital rain (a little dimmer than before so it never fights the text), clipped below the title bar
         float areaTop = wp.y + th, areaH = ws.y - th;
-        fx::Rect box{ 0.f, 0.f, ws.x, areaH };                                            // local, y up
+        fx::Rect box{ 0.f, 0.f, ws.x, areaH };
         g_rain.step(dt, RAIN_UNIT, box);
         bg->PushClipRect(ImVec2(wp.x, areaTop), wmax, true);
         ImFont* font = ImGui::GetFont();
@@ -147,7 +130,6 @@ namespace {
         }
         bg->PopClipRect();
 
-        // hairline green border; once in a while it tears for one frame (red ghost, shoved sideways)
         bg->AddRect(ImVec2(wp.x + 0.5f, wp.y + 0.5f), ImVec2(wmax.x - 0.5f, wmax.y - 0.5f), U(0.f, 0.9f, 0.3f, 0.8f), 0.f, 0, 1.f);
         if (fx::rnd() % 90 == 0)
             bg->AddRect(ImVec2(wp.x + fx::rf(-5.f, 5.f), wp.y + fx::rf(-3.f, 3.f)),
@@ -159,14 +141,11 @@ namespace {
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
         float th = ImGui::GetFrameHeight();
-        // fully opaque body: deep dark blue -> near black
         bg->AddRectFilledMultiColor(wp, wmax, U(0.02f, 0.05f, 0.12f, 1.f), U(0.02f, 0.05f, 0.12f, 1.f),
                                     U(0.f, 0.01f, 0.04f, 1.f), U(0.f, 0.01f, 0.04f, 1.f));
         bg->AddRectFilled(wp, ImVec2(wmax.x, wp.y + th), U(0.f, 0.14f, 0.22f, 1.f));
         bg->AddLine(ImVec2(wp.x, wp.y + th + 0.5f), ImVec2(wmax.x, wp.y + th + 0.5f), U(0.f, 0.9f, 1.f, 0.70f), 1.f);
 
-        // faint glowing grid (slow brightness breathing), thin lines, clipped under the title bar. Kept dim so it never
-        // competes with the text.
         float glow = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 1.6f);
         constexpr float CELL = 28.f;
         float gx0 = wp.x, gy0 = wp.y + th;
@@ -186,14 +165,11 @@ namespace {
             if ((ix % 4) != 3) continue;
             iy = 0;
             for (float y = gy0 + CELL; y < wmax.y; y += CELL, ++iy)
-                if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 1.6f, U(0.f, 0.9f, 1.f, 0.12f * glow), 8);   // glowing intersections
+                if ((iy % 4) == 3) bg->AddCircleFilled(ImVec2(x, y), 1.6f, U(0.f, 0.9f, 1.f, 0.12f * glow), 8);
         }
 
-        bg->PopClipRect();   // end of the grid clip (the grid stays below the title bar)
+        bg->PopClipRect();
 
-        // The scanning laser. It is drawn HERE, on the background list, so every label, button and switch is drawn on
-        // top of it: the laser can never hide or wash out text. It sweeps the WHOLE window, top edge to bottom edge
-        // (its own clip = the window rect). Buttons / switches still read g_laserY to light up.
         g_laserY = wp.y + 1.f + (ws.y - 2.f) * fx::scanPos(now);
         bg->PushClipRect(wp, wmax, true);
         {
@@ -202,20 +178,17 @@ namespace {
                 U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.08f));
             bg->AddRectFilledMultiColor(ImVec2(wp.x, y), ImVec2(wmax.x, y + band),
                 U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.08f), U(0.f, 1.f, 1.f, 0.f), U(0.f, 1.f, 1.f, 0.f));
-            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.f, 1.f, 1.f, 0.16f), 8.f);      // soft thick halo
-            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.65f), 2.6f);    // thicker core line
+            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.f, 1.f, 1.f, 0.16f), 8.f);
+            bg->AddLine(ImVec2(wp.x, y), ImVec2(wmax.x, y), U(0.5f, 1.f, 1.f, 0.65f), 2.6f);
         }
         bg->PopClipRect();
 
-        // hairline neon border: a faint 3 px halo that pulses + a crisp 1 px outline
         float pulse = fx::pulse01(now, 0.6f);
         ImVec2 a(wp.x + 0.5f, wp.y + 0.5f), b(wmax.x - 0.5f, wmax.y - 0.5f);
         bg->AddRect(a, b, U(0.f, 0.9f, 1.f, 0.04f + 0.05f * pulse), 0.f, 0, 3.f);
         bg->AddRect(a, b, U(0.f, 0.95f, 1.f, 0.90f), 0.f, 0, 1.f);
     }
 
-    // Called right after Begin(): draws the themed window body BEHIND the widgets (background draw list,
-    // clipped to the window rect so nothing ever renders outside the menu) and steps the particles.
     void fxBegin(ImVec2 wp, ImVec2 ws) {
         Kind k = curKind();
         if (k != g_lastKind) { g_paws.clear(); g_embers.clear(); g_rain.clear(); g_lastKind = k; }
@@ -227,11 +200,10 @@ namespace {
         double now = ImGui::GetTime();
         ImDrawList* bg = ImGui::GetBackgroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
-        fx::Rect box{ 4.f, 4.f, ws.x - 4.f, ws.y - 4.f };           // local, y up
+        fx::Rect box{ 4.f, 4.f, ws.x - 4.f, ws.y - 4.f };
         float rounding = ImGui::GetStyle().WindowRounding;
 
         if (k == Kind::Cat) {
-            // little ears on the top corners (they start exactly at the top edge)
             float e = std::min(ws.x, 900.f) * 0.035f + 12.f;
             ImU32 ear = U(fx::kPeach, 1.f), earIn = U(1.f, 0.86f, 0.88f, 1.f);
             bg->AddTriangleFilled(ImVec2(wp.x + rounding * 0.5f, wp.y + 1.f), ImVec2(wp.x + rounding * 0.5f + e * 0.2f, wp.y - e),
@@ -243,12 +215,10 @@ namespace {
             bg->AddTriangleFilled(ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.25f, wp.y + 1.f), ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.28f, wp.y - e * 0.6f),
                                   ImVec2(wp.x + ws.x - rounding * 0.5f - e * 0.95f, wp.y + 1.f), earIn);
 
-            // fully opaque near-white pink body + a soft sheen over the top third
             bg->AddRectFilled(wp, wmax, U(fx::kPinkWhite, 1.f), rounding);
             bg->AddRectFilledMultiColor(ImVec2(wp.x + rounding * 0.5f, wp.y + 2.f), ImVec2(wmax.x - rounding * 0.5f, wp.y + ws.y * 0.35f),
                                         U(1.f, 1.f, 1.f, 0.22f), U(1.f, 1.f, 1.f, 0.22f), U(1.f, 1.f, 1.f, 0.f), U(1.f, 1.f, 1.f, 0.f));
 
-            // scattered background paws (faint, so they never touch the text's contrast), clipped to the window
             bg->PushClipRect(wp, wmax, true);
             float sc = std::clamp(ws.y / 270.f, 1.f, 3.f);
             ImU32 pawCol = U(fx::kPeach, fx::kBgPawAlpha * 0.8f);
@@ -261,12 +231,10 @@ namespace {
             }
             bg->PopClipRect();
 
-            // thin lines instead of the old thick border: a hairline peach edge + a white rim just inside
             bg->AddRect(wp, wmax, U(fx::kPeach, 0.95f), rounding, 0, 1.2f);
             bg->AddRect(ImVec2(wp.x + 2.f, wp.y + 2.f), ImVec2(wmax.x - 2.f, wmax.y - 2.f), U(1.f, 1.f, 1.f, 0.50f),
                         std::max(0.f, rounding - 2.f), 0, 1.f);
 
-            // click anywhere inside the menu -> a small paw floats up and fades
             if (ImGui::IsMouseClicked(0)) {
                 ImVec2 m = ImGui::GetMousePos();
                 if (m.x >= wp.x && m.x <= wmax.x && m.y >= wp.y && m.y <= wmax.y)
@@ -274,37 +242,32 @@ namespace {
             }
             g_paws.step(dt, PAW_UNIT, box);
         } else {
-            // ---- Molten rocks: opaque chamfered panel, glowing cracked-lava texture, cracked-obsidian border, embers ----
             float c = std::clamp(ws.y * 0.04f, 12.f, 26.f);
             float th = ImGui::GetFrameHeight();
             float pulse = 0.85f + 0.15f * std::sin(static_cast<float>(now) * 2.2f);
             ImVec2 body[8];
             imChamfer(wp.x, wp.y, wmax.x, wmax.y, c, body);
-            bg->AddConvexPolyFilled(body, 8, U(0.11f, 0.063f, 0.047f, 1.f));   // fully opaque
+            bg->AddConvexPolyFilled(body, 8, U(0.11f, 0.063f, 0.047f, 1.f));
             auto const& lo = cky::kThemeDefs[std::clamp(cky::theme, 0, cky::ThemeCount - 1)].lo;
             ImVec2 bar[6] = { ImVec2(wp.x + c, wp.y), ImVec2(wmax.x - c, wp.y), ImVec2(wmax.x, wp.y + c),
                               ImVec2(wmax.x, wp.y + th), ImVec2(wp.x, wp.y + th), ImVec2(wp.x, wp.y + c) };
             bg->AddConvexPolyFilled(bar, 6, U(lo[0], lo[1], lo[2], 1.f));
 
             bg->PushClipRect(ImVec2(wp.x, wp.y + th), wmax, true);
-            // heat glowing up from the bottom of the window
             float gh = ws.y * 0.24f;
             bg->AddRectFilledMultiColor(ImVec2(wp.x + c, wmax.y - gh), ImVec2(wmax.x - c, wmax.y),
                 U(1.f, 0.40f, 0.07f, 0.f), U(1.f, 0.40f, 0.07f, 0.f),
                 U(1.f, 0.40f, 0.07f, 0.20f * pulse), U(1.f, 0.40f, 0.07f, 0.20f * pulse));
 
-            // cracked lava texture: a soft wide glow, an orange mid line and a hot core per crack segment. Toned down so
-            // the white / yellow text stays easy to read on top of it.
             fx::crackNet(ws.x, ws.y, 0xC0FFEEu, 0.45f, [&](float x0, float y0, float x1, float y1, bool br) {
                 ImVec2 a(wp.x + x0, wmax.y - y0), b(wp.x + x1, wmax.y - y1);
                 bg->AddLine(a, b, U(1.f, 0.42f, 0.08f, 0.06f * pulse), br ? 5.f : 8.f);
                 bg->AddLine(a, b, U(1.f, 0.52f, 0.12f, 0.20f * pulse), br ? 1.6f : 2.4f);
                 bg->AddLine(a, b, U(1.f, 0.84f, 0.42f, br ? 0.30f : 0.45f), br ? 0.7f : 1.1f);
-                if (!br) bg->AddCircleFilled(a, 2.6f, U(1.f, 0.62f, 0.2f, 0.25f * pulse), 8);   // hot spot where a crack bends
+                if (!br) bg->AddCircleFilled(a, 2.6f, U(1.f, 0.62f, 0.2f, 0.25f * pulse), 8);
             });
             bg->PopClipRect();
 
-            // embers: more of them, rising from the bottom (behind the widgets, clipped to the window)
             g_embers.cap = 48; g_embers.rate = 26.f; g_embers.lifeScale = 1.5f;
             g_embers.step(dt, EMBER_UNIT, box);
             bg->PushClipRect(wp, wmax, true);
@@ -313,13 +276,11 @@ namespace {
                 float a = fx::EmberPool::alphaOf(q);
                 fx::Col col = fx::emberColor(q.age / q.life);
                 ImVec2 pos(wp.x + q.x, wmax.y - q.y);
-                bg->AddCircleFilled(pos, q.size * 2.4f, U(col, a * 0.16f), 8);   // soft glow
+                bg->AddCircleFilled(pos, q.size * 2.4f, U(col, a * 0.16f), 8);
                 bg->AddCircleFilled(pos, q.size, U(col, a), 6);
             }
             bg->PopClipRect();
 
-            // border: a lava line underneath, cracked obsidian pieces on top. The gaps between the pieces
-            // are where the lava glows through. ~8 edges x (3 + a few pieces x 2) line calls.
             ImVec2 p[8];
             imChamfer(wp.x + 1.5f, wp.y + 1.5f, wmax.x - 1.5f, wmax.y - 1.5f, c, p);
             for (int i = 0; i < 8; ++i) {
@@ -332,17 +293,16 @@ namespace {
                 ImVec2 a = p[i], b = p[(i + 1) % 8];
                 fx::brokenEdge(a.x, a.y, b.x, b.y, 0x0B51D1u + static_cast<uint32_t>(i) * 7919u, 26.f, 78.f, 3.f, 7.f,
                     [&](float sx, float sy, float ex, float ey) {
-                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.045f, 0.04f, 0.05f, 0.97f), 4.6f);   // obsidian
-                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.34f, 0.30f, 0.40f, 0.55f), 0.9f);    // glassy sheen
+                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.045f, 0.04f, 0.05f, 0.97f), 4.6f);
+                        bg->AddLine(ImVec2(sx, sy), ImVec2(ex, ey), U(0.34f, 0.30f, 0.40f, 0.55f), 0.9f);
                     });
             }
             for (int i = 0; i < 8; ++i) bg->AddCircleFilled(p[i], 2.4f, U(0.045f, 0.04f, 0.05f, 0.97f), 8);
         }
     }
 
-    // Called just before End(): click paws float on top of the widgets, still clipped to the window.
     void fxEnd(ImVec2 wp, ImVec2 ws) {
-        if (curKind() == Kind::Cyber) return;   // (the laser is drawn behind the widgets, in cyBegin)
+        if (curKind() == Kind::Cyber) return;
         if (curKind() != Kind::Cat || g_paws.alive() == 0) return;
         ImDrawList* fg = ImGui::GetForegroundDrawList();
         ImVec2 wmax(wp.x + ws.x, wp.y + ws.y);
@@ -354,8 +314,6 @@ namespace {
         fg->PopClipRect();
     }
 
-    // Button. Cat: springy hover bounce (the button pops up, overshoots and settles, squashes when pressed).
-    // Lava: chamfered hexagonal corners + orange rim. Every other theme: the stock ImGui button.
     bool fxButton(char const* label) {
         Kind k = curKind();
         if (k == Kind::None) return ImGui::Button(label);
@@ -374,7 +332,7 @@ namespace {
 
         if (k == Kind::Cat) {
             ImGuiStorage* S = ImGui::GetStateStorage();
-            float t = S->GetFloat(id, -1.f);                      // seconds since the hover began, -1 = not hovered
+            float t = S->GetFloat(id, -1.f);
             t = hov ? (t < 0.f ? 0.f : t + ImGui::GetIO().DeltaTime) : -1.f;
             S->SetFloat(id, t);
             float s = 1.f;
@@ -387,18 +345,15 @@ namespace {
             dl->AddText(ImGui::GetFont(), ImGui::GetFontSize() * s,
                         ImVec2(c.x - ts.x * 0.5f * s, c.y - ts.y * 0.5f * s), txt, label, end);
         } else if (k == Kind::Cyber) {
-            // chamfered sci-fi corners + glowing cyan outline; brighter while the laser passes over it
             float li = fx::laserHit(c.y, g_laserY, sz.y * 1.2f);
             ImVec2 pts[8];
             imChamfer(p.x, p.y, p.x + sz.x, p.y + sz.y, sz.y * 0.20f, pts);
             dl->AddConvexPolyFilled(pts, 8, act ? U(0.f, 0.35f, 0.5f) : hov ? U(0.f, 0.22f, 0.34f) : U(0.01f, 0.08f, 0.15f));
             if (li > 0.f) dl->AddConvexPolyFilled(pts, 8, U(0.f, 1.f, 1.f, 0.14f * li));
-            dl->AddPolyline(pts, 8, U(0.f, 0.9f, 1.f, 0.08f + 0.10f * li + (hov || act ? 0.08f : 0.f)), ImDrawFlags_Closed, 3.f);   // faint glow
-            dl->AddPolyline(pts, 8, U(lerpf(0.f, 0.7f, li), 0.95f, 1.f, hov || act ? 1.f : 0.88f), ImDrawFlags_Closed, hov || act ? 1.5f : 1.1f);   // thin outline
+            dl->AddPolyline(pts, 8, U(0.f, 0.9f, 1.f, 0.08f + 0.10f * li + (hov || act ? 0.08f : 0.f)), ImDrawFlags_Closed, 3.f);
+            dl->AddPolyline(pts, 8, U(lerpf(0.f, 0.7f, li), 0.95f, 1.f, hov || act ? 1.f : 0.88f), ImDrawFlags_Closed, hov || act ? 1.5f : 1.1f);
             dl->AddText(ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(0.82f, 1.f, 1.f), label, end);
         } else if (k == Kind::Matrix) {
-            // SOLID black box (very dark green while hovered / pressed) + a hairline green border. While hovered the
-            // border glitches: new random shoves, a red and a white ghost (65% of frames), like it tears for a frame
             ImVec2 a(p.x, p.y), b(p.x + sz.x, p.y + sz.y);
             dl->AddRectFilled(a, b, act ? U(0.f, 0.22f, 0.08f) : hov ? U(0.f, 0.14f, 0.05f) : U(0.f, 0.f, 0.f));
             ImU32 green = U(0.f, 0.95f, 0.35f, 0.80f);
@@ -423,8 +378,6 @@ namespace {
         return pressed;
     }
 
-    // Matrix toggle: no checkbox. A block of binary: "1 0 1" green = ON, "0 X 0" corrupted red = OFF.
-    // On every change the text scrolls random characters for ~0.5 s and locks in left to right.
     bool mxToggle(char const* label, bool* v) {
         ImGuiStyle& st = ImGui::GetStyle();
         float bh = ImGui::GetFrameHeight();
@@ -437,12 +390,11 @@ namespace {
         if (pressed) *v = !*v;
         bool hov = ImGui::IsItemHovered();
 
-        // when did this switch last change (a click or the game flipping it)? kept in ImGui's state storage
         ImGuiStorage* S = ImGui::GetStateStorage();
         ImGuiID kPrev = id ^ 0x4D58u, kAt = id ^ 0x5458u;
         double now = ImGui::GetTime();
         float cur = *v ? 1.f : 0.f, prev = S->GetFloat(kPrev, -1.f);
-        if (prev < 0.f) S->SetFloat(kAt, -10.f);                         // first time seen: no animation
+        if (prev < 0.f) S->SetFloat(kAt, -10.f);
         else if (prev != cur) S->SetFloat(kAt, static_cast<float>(now));
         S->SetFloat(kPrev, cur);
         float t = static_cast<float>(now) - S->GetFloat(kAt, -10.f);
@@ -451,7 +403,7 @@ namespace {
         char const* target = *v ? fx::kBinOn : fx::kBinOff;
         char const* shown = target;
         bool scrolling = false;
-        if (t >= 0.f && t < 0.6f) {                                      // just changed: scroll, then lock in
+        if (t >= 0.f && t < 0.6f) {
             scrolling = !fx::scramble(target, t, static_cast<uint32_t>(now * 30.0) + id, buf, sizeof(buf));
             shown = buf;
         }
@@ -459,11 +411,11 @@ namespace {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 a(p.x, p.y), b(p.x + bw, p.y + bh);
         ImU32 col = scrolling ? U(0.78f, 1.f, 0.82f) : *v ? U(0.f, 1.f, 0.31f) : U(1.f, 0.2f, 0.2f);
-        dl->AddRectFilled(a, b, U(0.f, 0.f, 0.f));      // solid black behind the binary text
+        dl->AddRectFilled(a, b, U(0.f, 0.f, 0.f));
         dl->AddRect(a, b, *v ? U(0.f, 0.95f, 0.3f, hov ? 1.f : 0.85f) : U(1.f, 0.2f, 0.2f, hov ? 1.f : 0.85f), 0.f, 0, hov ? 1.8f : 1.1f);
         ImVec2 tp(a.x + (bw - bin.x) * 0.5f, a.y + (bh - bin.y) * 0.5f);
         dl->AddText(tp, col, shown);
-        if (!*v) {                                                       // OFF is "corrupted": rare one-frame white tear + torn strip
+        if (!*v) {
             uint32_t h = fx::hash32(id, static_cast<uint32_t>(now * 15.0));
             if (h % 40u == 0) dl->AddText(ImVec2(tp.x + 2.f, tp.y - 1.f), U(1.f, 1.f, 1.f, 0.55f), shown);
             if (h % 25u == 1) dl->AddRectFilled(ImVec2(a.x + 2.f, a.y + bh * 0.4f), ImVec2(a.x + bw * 0.7f, a.y + bh * 0.4f + 2.f), U(1.f, 0.3f, 0.3f, 0.7f));
@@ -475,8 +427,6 @@ namespace {
         return pressed;
     }
 
-    // Cyber toggle: a hexagonal switch. ON = pulsing neon cyan border + inner glow, knob slid right.
-    // OFF = dark grey, no glow, knob left. The label is bright cyan ON / dark grey OFF and fades in on change.
     bool cyToggle(char const* label, bool* v) {
         ImGuiStyle& st = ImGui::GetStyle();
         float bs = ImGui::GetFrameHeight(), tw = bs * 1.65f;
@@ -500,26 +450,25 @@ namespace {
         ImVec2 hx[6] = { ImVec2(x0 + c, y0), ImVec2(x1 - c, y0), ImVec2(x1, cy), ImVec2(x1 - c, y1), ImVec2(x0 + c, y1), ImVec2(x0, cy) };
         dl->AddConvexPolyFilled(hx, 6, U(lerpf(0.07f, 0.f, a), lerpf(0.08f, 0.16f, a), lerpf(0.10f, 0.22f, a)));
         if (a > 0.02f) {
-            dl->AddPolyline(hx, 6, U(0.f, 0.95f, 1.f, (0.10f + 0.14f * pulse) * a), ImDrawFlags_Closed, bs * 0.16f);   // faint outer glow
+            dl->AddPolyline(hx, 6, U(0.f, 0.95f, 1.f, (0.10f + 0.14f * pulse) * a), ImDrawFlags_Closed, bs * 0.16f);
             ImVec2 in[6];
             for (int i = 0; i < 6; ++i) in[i] = ImVec2(lerpf(hx[i].x, (x0 + x1) * 0.5f, 0.28f), lerpf(hx[i].y, cy, 0.28f));
-            dl->AddConvexPolyFilled(in, 6, U(0.f, 0.9f, 1.f, (0.07f + 0.09f * pulse) * a));                           // inner glow
+            dl->AddConvexPolyFilled(in, 6, U(0.f, 0.9f, 1.f, (0.07f + 0.09f * pulse) * a));
         }
         dl->AddPolyline(hx, 6, U(lerpf(0.22f, 0.f, a), lerpf(0.25f, 0.95f, a), lerpf(0.30f, 1.f, a)), ImDrawFlags_Closed, hov ? 1.8f : 1.2f);
         float kx = lerpf(x0 + bs * 0.55f, x1 - bs * 0.55f, a), kr = bs * 0.24f;
         ImVec2 kn[6] = { ImVec2(kx - kr * 0.6f, cy - kr), ImVec2(kx + kr * 0.6f, cy - kr), ImVec2(kx + kr, cy),
                          ImVec2(kx + kr * 0.6f, cy + kr), ImVec2(kx - kr * 0.6f, cy + kr), ImVec2(kx - kr, cy) };
         dl->AddConvexPolyFilled(kn, 6, U(lerpf(0.25f, 0.65f, a), lerpf(0.27f, 1.f, a), lerpf(0.31f, 1.f, a)));
-        if (li > 0.f) dl->AddPolyline(hx, 6, U(0.6f, 1.f, 1.f, 0.8f * li), ImDrawFlags_Closed, 1.5f);                  // laser highlight
+        if (li > 0.f) dl->AddPolyline(hx, 6, U(0.6f, 1.f, 1.f, 0.8f * li), ImDrawFlags_Closed, 1.5f);
         if (ts.x > 0.f) {
             char const* end = std::strstr(label, "##");
-            ImU32 tc = U(lerpf(0.55f, 0.f, a), lerpf(0.63f, 0.94f, a), lerpf(0.71f, 1.f, a));   // OFF is light grey-blue (readable), ON neon cyan
+            ImU32 tc = U(lerpf(0.55f, 0.f, a), lerpf(0.63f, 0.94f, a), lerpf(0.71f, 1.f, a));
             dl->AddText(ImVec2(x1 + st.ItemInnerSpacing.x, cy - ts.y * 0.5f), tc, label, end);
         }
         return pressed;
     }
 
-    // Checkbox. Cat: cat-face box (ears) that pops a paw print in. Lava: magma box with an orange check.
     bool fxCheckbox(char const* label, bool* v) {
         Kind k = curKind();
         if (k == Kind::None) return ImGui::Checkbox(label, v);
@@ -536,7 +485,7 @@ namespace {
 
         ImGuiStorage* S = ImGui::GetStateStorage();
         float target = *v ? 1.f : 0.f;
-        float a = S->GetFloat(id, target);                       // 0..1 animation
+        float a = S->GetFloat(id, target);
         a += (target - a) * std::min(1.f, ImGui::GetIO().DeltaTime * 14.f);
         S->SetFloat(id, a);
 
@@ -555,7 +504,7 @@ namespace {
             dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), face, r);
             dl->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), U(1.f, hov ? 0.58f : 0.66f, hov ? 0.56f : 0.60f), r, 0, hov ? 1.8f : 1.2f);
             if (a > 0.02f) {
-                float pop = a * (1.f + 0.35f * std::sin(a * 3.14159f));   // overshoots, then settles
+                float pop = a * (1.f + 0.35f * std::sin(a * 3.14159f));
                 imPaw(dl, cx, cy + bs * 0.03f, bs * 0.30f * pop, 0.f, U(fx::kPeachDeep, std::min(1.f, a * 1.3f)));
                 dl->AddCircleFilled(ImVec2(x0 + bs * .17f, y1 - bs * .17f), bs * .08f, U(1.f, 0.62f, 0.68f, 0.6f * a), 8);
                 dl->AddCircleFilled(ImVec2(x1 - bs * .17f, y1 - bs * .17f), bs * .08f, U(1.f, 0.62f, 0.68f, 0.6f * a), 8);
@@ -566,14 +515,14 @@ namespace {
             ImVec2 hexo[8];
             imChamfer(x0, y0, x1, y1, c, hexo);
             dl->AddConvexPolyFilled(hexo, 8, U(0.11f, 0.03f, 0.02f));
-            float m = c * 0.9f;                                            // magma core, brighter when ON
+            float m = c * 0.9f;
             dl->AddRectFilledMultiColor(ImVec2(x0 + m, y0 + m), ImVec2(x1 - m, y1 - m),
                 U(0.22f, 0.05f, 0.02f), U(0.22f, 0.05f, 0.02f),
                 U(lerpf(0.40f, 0.95f * pulse, a), lerpf(0.10f, 0.30f, a), 0.04f),
                 U(lerpf(0.40f, 0.95f * pulse, a), lerpf(0.10f, 0.30f, a), 0.04f));
             dl->AddPolyline(hexo, 8, U(lerpf(0.60f, 1.f, a), lerpf(0.22f, 0.45f, a), lerpf(0.10f, 0.08f, a)),
                             ImDrawFlags_Closed, hov ? 3.f : 2.f);
-            if (a > 0.02f) {                                              // orange check
+            if (a > 0.02f) {
                 ImVec2 ck[3] = { ImVec2(x0 + bs * .24f, cy + bs * .02f), ImVec2(x0 + bs * .43f, y1 - bs * .26f),
                                  ImVec2(x1 - bs * .20f, y0 + bs * .26f) };
                 dl->AddPolyline(ck, 3, U(1.f, 0.50f, 0.06f, std::min(1.f, a * 1.4f)), 0, bs * 0.16f);
@@ -594,7 +543,7 @@ namespace {
         ImVec4 pinkHi(std::min(pink.x + 0.12f, 1.f), std::min(pink.y + 0.12f, 1.f),
                       std::min(pink.z + 0.12f, 1.f), 1.f);
         auto& c = ImGui::GetStyle().Colors;
-        c[ImGuiCol_WindowBg]       = ImVec4(0.07f, 0.07f, 0.10f, 1.f);   // menus are always fully opaque
+        c[ImGuiCol_WindowBg]       = ImVec4(0.07f, 0.07f, 0.10f, 1.f);
         c[ImGuiCol_Border]         = pink;
         c[ImGuiCol_TitleBg]        = pinkLo;
         c[ImGuiCol_TitleBgActive]  = pinkLo;
@@ -614,11 +563,9 @@ namespace {
         c[ImGuiCol_TabHovered]     = pink;
         c[ImGuiCol_TabActive]      = pinkLo;
 
-        // ---- Cat: near-white pink, peach pink accents, dark rose text ----
         fx::Kind k = fx::kindOf(t);
         auto& st = ImGui::GetStyle();
         float wr = 14.f, fr = 9.f;
-        // base spacing (the original look); the four floating themes below tighten it
         st.FramePadding = ImVec2(14.f, 10.f);
         st.ItemSpacing = ImVec2(12.f, 12.f);
         st.ItemInnerSpacing = ImVec2(5.6f, 5.6f);
@@ -628,9 +575,9 @@ namespace {
         st.WindowBorderSize = 2.f;
         if (k == fx::Kind::Cat) {
             wr = 20.f; fr = 12.f;
-            c[ImGuiCol_Text]          = ImVec4(0.40f, 0.12f, 0.22f, 1.f);     // deep rose: strong contrast on the pink-white body
+            c[ImGuiCol_Text]          = ImVec4(0.40f, 0.12f, 0.22f, 1.f);
             c[ImGuiCol_TextDisabled]  = ImVec4(0.58f, 0.28f, 0.40f, 1.f);
-            c[ImGuiCol_WindowBg]      = ImVec4(1.00f, 0.957f, 0.969f, 1.f);   // (hidden: drawn by fxBegin)
+            c[ImGuiCol_WindowBg]      = ImVec4(1.00f, 0.957f, 0.969f, 1.f);
             c[ImGuiCol_PopupBg]       = ImVec4(1.00f, 0.95f, 0.96f, 1.f);
             c[ImGuiCol_Border]        = ImVec4(1.00f, 0.71f, 0.63f, 1.f);
             c[ImGuiCol_TitleBg]       = ImVec4(1.00f, 0.80f, 0.74f, 1.f);
@@ -655,20 +602,18 @@ namespace {
             c[ImGuiCol_ScrollbarBg]   = ImVec4(1.00f, 0.92f, 0.94f, 1.f);
             c[ImGuiCol_ScrollbarGrab] = ImVec4(1.00f, 0.75f, 0.72f, 1.f);
         } else if (k == fx::Kind::Lava) {
-            // ---- Molten rocks: sharp corners (the chamfers are drawn by fxBegin / fxButton / fxCheckbox) ----
             wr = 0.f; fr = 0.f;
-            c[ImGuiCol_Text]          = ImVec4(1.00f, 1.00f, 1.00f, 1.f);     // pure white
-            c[ImGuiCol_TextDisabled]  = ImVec4(1.00f, 0.90f, 0.35f, 1.f);     // bright yellow (info lines)
-            c[ImGuiCol_WindowBg]      = ImVec4(0.11f, 0.063f, 0.047f, 1.f);   // fully opaque
+            c[ImGuiCol_Text]          = ImVec4(1.00f, 1.00f, 1.00f, 1.f);
+            c[ImGuiCol_TextDisabled]  = ImVec4(1.00f, 0.90f, 0.35f, 1.f);
+            c[ImGuiCol_WindowBg]      = ImVec4(0.11f, 0.063f, 0.047f, 1.f);
             c[ImGuiCol_PopupBg]       = ImVec4(0.11f, 0.063f, 0.047f, 1.f);
-            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);           // drawn by fxBegin (chamfered)
+            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgActive] = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgCollapsed] = pinkLo;
             c[ImGuiCol_FrameBg]       = ImVec4(0.20f, 0.09f, 0.06f, 1.f);
             c[ImGuiCol_FrameBgHovered]= ImVec4(0.30f, 0.12f, 0.07f, 1.f);
             c[ImGuiCol_FrameBgActive] = ImVec4(0.40f, 0.15f, 0.08f, 1.f);
             c[ImGuiCol_CheckMark]     = ImVec4(1.00f, 0.55f, 0.10f, 1.f);
-            // hover / active fills stay dark enough for white text (the bright orange accent made it unreadable)
             c[ImGuiCol_ButtonHovered] = ImVec4(0.80f, 0.22f, 0.05f, 1.f);
             c[ImGuiCol_ButtonActive]  = ImVec4(0.92f, 0.32f, 0.07f, 1.f);
             c[ImGuiCol_HeaderHovered] = ImVec4(0.80f, 0.22f, 0.05f, 1.f);
@@ -680,7 +625,6 @@ namespace {
         }
         st.FrameBorderSize = 0.f;
         if (k == fx::Kind::Matrix) {
-            // ---- Matrix: pure black, terminal green, sharp corners (body / rain / buttons / toggles: fxBegin etc.) ----
             wr = 0.f; fr = 0.f;
             st.FrameBorderSize = 1.f;
             c[ImGuiCol_Text]          = ImVec4(0.78f, 1.00f, 0.82f, 1.f);
@@ -688,7 +632,7 @@ namespace {
             c[ImGuiCol_WindowBg]      = ImVec4(0.f, 0.f, 0.f, 1.f);
             c[ImGuiCol_PopupBg]       = ImVec4(0.f, 0.05f, 0.02f, 1.f);
             c[ImGuiCol_Border]        = ImVec4(0.f, 0.90f, 0.30f, 1.f);
-            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);           // drawn by fxBegin
+            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgActive] = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.f, 0.16f, 0.06f, 1.f);
             c[ImGuiCol_FrameBg]       = ImVec4(0.f, 0.10f, 0.04f, 1.f);
@@ -700,7 +644,7 @@ namespace {
             c[ImGuiCol_Button]        = ImVec4(0.f, 0.f, 0.f, 1.f);
             c[ImGuiCol_ButtonHovered] = ImVec4(0.f, 0.16f, 0.06f, 1.f);
             c[ImGuiCol_ButtonActive]  = ImVec4(0.f, 0.28f, 0.10f, 1.f);
-            c[ImGuiCol_Header]        = ImVec4(0.f, 0.14f, 0.05f, 1.f);       // dark: the pale green text stays readable
+            c[ImGuiCol_Header]        = ImVec4(0.f, 0.14f, 0.05f, 1.f);
             c[ImGuiCol_HeaderHovered] = ImVec4(0.f, 0.26f, 0.09f, 1.f);
             c[ImGuiCol_HeaderActive]  = ImVec4(0.f, 0.36f, 0.13f, 1.f);
             c[ImGuiCol_Tab]           = ImVec4(0.f, 0.10f, 0.04f, 1.f);
@@ -710,7 +654,6 @@ namespace {
             c[ImGuiCol_ScrollbarBg]   = ImVec4(0.f, 0.f, 0.f, 1.f);
             c[ImGuiCol_ScrollbarGrab] = ImVec4(0.f, 0.45f, 0.18f, 1.f);
         } else if (k == fx::Kind::Cyber) {
-            // ---- Cyber: deep blue-black, neon cyan (grid / laser / hex switches / chamfered buttons: fxBegin etc.) ----
             wr = 0.f; fr = 0.f;
             st.FrameBorderSize = 1.f;
             c[ImGuiCol_Text]          = ImVec4(0.78f, 0.97f, 1.00f, 1.f);
@@ -718,7 +661,7 @@ namespace {
             c[ImGuiCol_WindowBg]      = ImVec4(0.016f, 0.035f, 0.08f, 1.f);
             c[ImGuiCol_PopupBg]       = ImVec4(0.02f, 0.05f, 0.10f, 1.f);
             c[ImGuiCol_Border]        = ImVec4(0.f, 0.80f, 0.90f, 0.8f);
-            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);           // drawn by fxBegin
+            c[ImGuiCol_TitleBg]       = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgActive] = ImVec4(0.f, 0.f, 0.f, 0.f);
             c[ImGuiCol_TitleBgCollapsed] = ImVec4(0.f, 0.14f, 0.22f, 1.f);
             c[ImGuiCol_FrameBg]       = ImVec4(0.03f, 0.07f, 0.13f, 1.f);
@@ -730,7 +673,7 @@ namespace {
             c[ImGuiCol_Button]        = ImVec4(0.01f, 0.08f, 0.15f, 1.f);
             c[ImGuiCol_ButtonHovered] = ImVec4(0.f, 0.22f, 0.34f, 1.f);
             c[ImGuiCol_ButtonActive]  = ImVec4(0.f, 0.35f, 0.50f, 1.f);
-            c[ImGuiCol_Header]        = ImVec4(0.f, 0.20f, 0.32f, 1.f);       // dark: the light cyan text stays readable
+            c[ImGuiCol_Header]        = ImVec4(0.f, 0.20f, 0.32f, 1.f);
             c[ImGuiCol_HeaderHovered] = ImVec4(0.f, 0.30f, 0.46f, 1.f);
             c[ImGuiCol_HeaderActive]  = ImVec4(0.f, 0.40f, 0.58f, 1.f);
             c[ImGuiCol_Tab]           = ImVec4(0.03f, 0.07f, 0.13f, 1.f);
@@ -740,8 +683,6 @@ namespace {
             c[ImGuiCol_ScrollbarBg]   = ImVec4(0.f, 0.02f, 0.05f, 1.f);
             c[ImGuiCol_ScrollbarGrab] = ImVec4(0.f, 0.50f, 0.60f, 1.f);
         }
-        // ---- the four decorated themes: thin lines + tight padding. Every window, widget and popup colour stays FULLY
-        //      OPAQUE (the menu must never blend into the level behind it). Opacity is only a setting of the in-level HUD. ----
         if (k == fx::Kind::Cat) {
             wr = 16.f; fr = 10.f;
             st.FramePadding = ImVec2(11.f, 7.f);
@@ -767,8 +708,6 @@ namespace {
             st.ScrollbarSize = 18.f;
             st.WindowBorderSize = 1.f;
         }
-        // Every window / popup / scrollbar surface is fully opaque in EVERY theme (ImGui's own defaults are 0.94 / 0.53 / 0.51).
-        // Only the in-level HUD has an opacity setting (Display tab: HUD opacity).
         st.Alpha = 1.f;
         c[ImGuiCol_WindowBg].w = 1.f;
         c[ImGuiCol_MenuBarBg].w = 1.f;
@@ -1032,7 +971,7 @@ namespace {
         ch |= fxCheckbox("Startpos run", &cky::lblRun);
         ch |= fxCheckbox("Level time", &cky::lblTime);
         ch |= fxCheckbox("Best run", &cky::lblBest);
-        if (ch) cky::labelsSave(); // remembered between launches
+        if (ch) cky::labelsSave();
     }
 
     void tabDisplay() {
@@ -1064,8 +1003,6 @@ namespace {
             cky::hudScale = hs;
             ckyApplyHudScale();
         }
-        // opacity of the in-level HUD panels ONLY: this menu is always fully opaque. ckyHudRefresh() (end of drawMenu)
-        // redraws the HUD when it changes.
         int hop = static_cast<int>(std::lround(cky::hudOpacity * 100.f));
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
         if (ImGui::SliderInt("HUD opacity", &hop, 10, 100, "%d%%")) {
@@ -1140,11 +1077,10 @@ namespace {
     void tabRendering() {
         auto& R = chxr::Renderer::get();
         if (!R.available()) {
-            ImGui::TextWrapped("Rendering needs the FFmpeg API mod (eclipse.ffmpeg-api, Android). Install it and restart the game.");
+            ImGui::TextWrapped("Rendering uses the built-in Android encoder and is only available on Android.");
         }
         float w = ImGui::GetContentRegionAvail().x * 0.55f;
 
-        // codec: pick from what FFmpeg API reports, or type one if it reports nothing
         auto codecs = chxr::Renderer::codecs();
         ImGui::SetNextItemWidth(w);
         if (!codecs.empty()) {
@@ -1161,24 +1097,19 @@ namespace {
             if (ImGui::InputText("Codec", codecBuf, sizeof codecBuf)) { R.cfg.codec = codecBuf; R.save(); }
         }
 
-        // filters (FFmpeg -vf style string; the API has no free-form args field)
-        static char filtBuf[256] = {};
-        static bool filtInit = false;
-        if (!filtInit) { std::snprintf(filtBuf, sizeof filtBuf, "%s", R.cfg.filters.c_str()); filtInit = true; }
-        ImGui::SetNextItemWidth(w);
-        if (ImGui::InputText("Filters (-vf)", filtBuf, sizeof filtBuf)) { R.cfg.filters = filtBuf; R.save(); }
-
         static char nameBuf[64] = {};
         static bool nameInit = false;
         if (!nameInit) { std::snprintf(nameBuf, sizeof nameBuf, "%s", R.cfg.name.c_str()); nameInit = true; }
         ImGui::SetNextItemWidth(w);
         if (ImGui::InputText("File name", nameBuf, sizeof nameBuf)) { R.cfg.name = nameBuf; R.save(); }
 
-        // resolution: capped at 1080p
         static char const* resNames[4] = { "1920x1080", "1280x720", "854x480", "640x360" };
         int ri = R.resIndex();
         ImGui::SetNextItemWidth(w);
         if (ImGui::Combo("Resolution", &ri, resNames, 4)) { R.setRes(ri); R.save(); }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Help")) ckyNotify(R.autoSetup().c_str(), true);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reads your phone chipset and sets the resolution");
 
         int fps = R.cfg.fps;
         ImGui::SetNextItemWidth(w);
@@ -1236,10 +1167,6 @@ namespace {
         }
     }
 
-    // Frame Window Calculator label. The result is computed at once; here it is COUNTED OUT slowly (cky::fwSpeed):
-    // "frames to click" ticks up from 0 to the start of the window, then across the window, and only then the
-    // 60 / 120 / 240 FW rows are shown. Hidden while the HUD is on (the HUD sits where the label goes).
-    // Window -> FW: 1 step = 240 FW, 2-3 steps = 120 FW, 4+ steps = 60 FW (a frame at F FPS lands every 240/F steps).
     void drawFrameWindow() {
         if (!cky::fwOn || !cky::fwShow || cky::hudOn) return;
         auto pl = PlayLayer::get();
@@ -1248,10 +1175,10 @@ namespace {
         if (!r.valid) return;
 
         double age = cky::fwNow() - r.stamp;
-        float rate = 20.f * std::clamp(cky::fwSpeed, 0.25f, 2.f);     // frames counted per second
+        float rate = 20.f * std::clamp(cky::fwSpeed, 0.25f, 2.f);
         int start = std::max(r.lo, 0);
         int endv = r.hi;
-        bool ahead = r.window && endv >= 0;                          // part of the window is still in front of the click
+        bool ahead = r.window && endv >= 0;
         float countSecs = ahead ? static_cast<float>(endv) / rate : 0.f;
         if (age > countSecs + cky::fwHold) return;
         float fade = std::clamp(static_cast<float>((countSecs + cky::fwHold - age) / 0.5), 0.f, 1.f);
@@ -1268,7 +1195,7 @@ namespace {
 
         static constexpr int kTiers[3] = { 60, 120, 240 };
         int tier = r.window ? ckyFwTier(r.width, r.stepHz) : 0;
-        int status[3];                                // 2 guaranteed, 1 possible, 0 no
+        int status[3];
         for (int i = 0; i < 3; ++i) {
             int need = std::max(1, static_cast<int>(std::ceil(r.stepHz / kTiers[i] - 1e-4f)));
             if (r.window && r.width >= need) status[i] = 2;
@@ -1350,7 +1277,6 @@ namespace {
         ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(460.f, disp.x), std::min(320.f, disp.y)), disp);
 
         bool open = true;
-        // The four decorated themes draw their own fully opaque body behind the widgets
         ImGuiWindowFlags flags = curKind() != Kind::None ? ImGuiWindowFlags_NoBackground : 0;
         if (ImGui::Begin("ChxrCky Macro Bot", &open, flags)) {
             ImVec2 fxPos = ImGui::GetWindowPos(), fxSize = ImGui::GetWindowSize();
@@ -1366,7 +1292,7 @@ namespace {
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();
             }
-            fxTextShadowForTheme(fxPos, fxSize);   // drop shadow behind the text (Matrix / Cyber / Cat / Molten rocks)
+            fxTextShadowForTheme(fxPos, fxSize);
             fxEnd(fxPos, fxSize);
         }
         ImGui::End();
@@ -1392,4 +1318,3 @@ void ckyImGuiToggle() {}
 
 #endif
 
-// END OF FILE (imgui_ui.cpp)

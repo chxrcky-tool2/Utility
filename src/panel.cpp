@@ -1,11 +1,9 @@
-// panel.cpp — menu: themes (see themes.hpp), 6 tabs, black-outlined pills, +/- values, scrolling rows
 #include "state.hpp"
 #include "fx.hpp"
 #include "render/ChxrRender.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace {
-    // Cocos-side view of a theme (built once from cky::kThemeDefs in themes.hpp)
     struct Theme {
         ccColor3B card, side, tab, off, on, accent, btn, title;
         ccColor4B top, bottom;
@@ -55,52 +53,43 @@ namespace {
         TAB_BASE = 100
     };
 
-    // hitbox trail page (kept above the other tag ranges)
     enum : int {
         B_TR_GEAR = 200, B_TR_BACK, B_TRL_DN, B_TRL_UP,
-        B_TRC_BASE = 210,   // 210..225: [which*8 + channel*2 + (up ? 1 : 0)], which 0 = outer, 1 = inner
+        B_TRC_BASE = 210,
         L_TRL = 230,
-        L_TRC_BASE = 231,   // 231..238: [which*4 + channel]
+        L_TRC_BASE = 231,
         L_SW_OUT = 240, L_SW_IN
     };
 
-    // Labels tab (kept above the other tag ranges). The tab itself is page 8; its button sits
-    // between Display and Clicks, so page numbers 6 / 7 (HUD settings / Hitbox trail) stay as they are.
     enum : int {
         T_LBL_FPS = 250, T_LBL_RUN, T_LBL_TIME, T_LBL_BEST,
         PAGE_LABELS = 8
     };
 
-    // Rendering (Beta) tab: page 9
     enum : int {
         B_RN_CODEC_DN = 300, B_RN_CODEC_UP, B_RN_RES_DN, B_RN_RES_UP, B_RN_FPS_DN, B_RN_FPS_UP,
-        B_RN_BR_DN, B_RN_BR_UP, B_RN_START, B_RN_STOP,
+        B_RN_BR_DN, B_RN_BR_UP, B_RN_START, B_RN_STOP, B_RN_HELP,
         L_RN_CODEC = 320, L_RN_RES, L_RN_FPS, L_RN_BR, L_RN_FILT, L_RN_STATUS, L_RN_HINT,
         PAGE_RENDER = 9
     };
 
-    // headless physics rows (Global tab)
     enum : int { T_HEADLESS = 330, B_HB_DN, B_HB_UP, L_HB = 335, L_REALTPS };
 
-    // row label of a toggle row = LBL_TAGS + the toggle's tag (Cyber tints it cyan / grey)
     enum : int { LBL_TAGS = 1000 };
 
     constexpr float ROW = 28.f;
     constexpr float VIEW_TOP = 90.f;
     constexpr float VIEW_BOTTOM = -112.f;
 
-    // ================= theme effects (Cat / Molten rocks) — maths lives in fx.hpp =================
     using cky::fx::Kind;
     Kind fxKind() { return cky::fx::kindOf(cky::theme); }
 
-    // CCDrawNode blends premultiplied, so every translucent colour goes through these
     ccColor4F pm(float r, float g, float b, float a = 1.f) { return ccc4f(r * a, g * a, b * a, a); }
     ccColor4F pm3(ccColor3B c, float a = 1.f) { return pm(c.r / 255.f, c.g / 255.f, c.b / 255.f, a); }
     ccColor4F pmc(cky::fx::Col c, float a = 1.f) { return pm(c.r, c.g, c.b, a); }
 
     constexpr float PI_F = 3.14159265f;
 
-    // rounded rectangle, 4 segments per corner -> 20 points
     int roundRect(CCPoint* out, float x0, float y0, float x1, float y1, float r) {
         int n = 0;
         float cx[4] = { x1 - r, x0 + r, x0 + r, x1 - r };
@@ -114,7 +103,6 @@ namespace {
         return n;
     }
 
-    // chamfered ("hexagonal") corners: 8 points
     void chamferPts(CCPoint* o, float x0, float y0, float x1, float y1, float c) {
         float f[8][2];
         cky::fx::chamfer(x0, y0, x1, y1, c, f);
@@ -125,7 +113,6 @@ namespace {
         cky::fx::pawDots(x, y, s, rot, [&](float px, float py, float r) { d->drawDot({ px, py }, r, col); });
     }
 
-    // Molten rocks button: sharp chamfered corners, hot orange rim, lit top edge
     void drawLavaBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
         d->clear();
         float k = std::min(h * 0.3f, 6.f);
@@ -135,7 +122,6 @@ namespace {
         d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(1.f, 0.78f, 0.4f, 0.35f));
     }
 
-    // Cyber button: sharp chamfered corners, glowing cyan outline (soft halo first, crisp line on top)
     void drawCyberBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
         d->clear();
         float k = std::min(h * 0.3f, 6.f);
@@ -146,8 +132,6 @@ namespace {
         d->drawSegment({ k + 1.f, h - 1.f }, { w - k - 1.f, h - 1.f }, 0.4f, pm(0.7f, 1.f, 1.f, 0.35f));
     }
 
-    // Matrix button: SOLID black box (c is black, or a very dark green for the selected tab / +/-), green border,
-    // one red "corrupted" tick in the corner
     void drawMatrixBtn(CCDrawNode* d, float w, float h, ccColor3B c) {
         d->clear();
         CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
@@ -155,10 +139,7 @@ namespace {
         d->drawSegment({ w - 10.f, h - 1.f }, { w - 3.f, h - 1.f }, 0.5f, pm(1.f, 0.2f, 0.2f, 0.9f));
     }
 
-    // buttons that are one CCDrawNode (instead of the stock bordered sprite) in these themes
     bool drawnBtn(Kind k) { return k == Kind::Lava || k == Kind::Cyber || k == Kind::Matrix; }
-    // The +/- buttons and the selected tab use the theme's bright accent colour. In these three themes the label is
-    // light, so a bright fill would swallow it: those buttons get a dark version of the accent instead.
     bool isAccent(ccColor3B c) {
         auto const& a = thm().accent;
         return c.r == a.r && c.g == a.g && c.b == a.b;
@@ -167,19 +148,17 @@ namespace {
         bool hot = isAccent(c);
         switch (fxKind()) {
             case Kind::Cyber:  drawCyberBtn(d, w, h, hot ? ccc3(0, 62, 96) : c); break;
-            case Kind::Matrix: drawMatrixBtn(d, w, h, hot ? ccc3(0, 46, 14) : ccc3(0, 0, 0)); break;   // solid black
+            case Kind::Matrix: drawMatrixBtn(d, w, h, hot ? ccc3(0, 46, 14) : ccc3(0, 0, 0)); break;
             default:           drawLavaBtn(d, w, h, hot ? ccc3(150, 52, 12) : c); break;
         }
     }
 
-    // text colours per theme (labels / small grey text)
-    // All of these are picked for strong contrast against the (always opaque) card of their theme.
     ccColor3B labelCol() {
         switch (fxKind()) {
-            case Kind::Cat:    return ccc3(150, 40, 78);     // deep rose on the near-white pink card
+            case Kind::Cat:    return ccc3(150, 40, 78);
             case Kind::Matrix: return ccc3(200, 255, 215);
             case Kind::Cyber:  return ccc3(190, 242, 250);
-            default:           return ccc3(255, 255, 255);   // Molten rocks: pure white
+            default:           return ccc3(255, 255, 255);
         }
     }
     ccColor3B subCol() {
@@ -187,7 +166,7 @@ namespace {
             case Kind::Cat:    return ccc3(170, 84, 112);
             case Kind::Matrix: return ccc3(70, 200, 105);
             case Kind::Cyber:  return ccc3(140, 190, 210);
-            case Kind::Lava:   return ccc3(255, 226, 90);    // Molten rocks: bright yellow
+            case Kind::Lava:   return ccc3(255, 226, 90);
             default:           return ccc3(150, 160, 190);
         }
     }
@@ -198,7 +177,6 @@ namespace {
             default:         return thm().title;
         }
     }
-    // text on a button. Cat's buttons are light peach, so their text is dark rose instead of white.
     ccColor3B btnTextCol() {
         switch (fxKind()) {
             case Kind::Cat:    return ccc3(120, 36, 64);
@@ -207,25 +185,22 @@ namespace {
             default:           return ccc3(255, 255, 255);
         }
     }
-    const ccColor3B kCyberRowOff = ccc3(140, 156, 176);      // Cyber toggle row, switch OFF (was a dark grey)
+    const ccColor3B kCyberRowOff = ccc3(140, 156, 176);
 
-    // ---- toggle boxes (26x22). Cat = cat-face box with ears + paw check. Lava = magma box + orange check.
-    //      Cyber = hexagonal switch (knob slides, neon glow ring pulses when ON). Matrix = binary text block. ----
     constexpr float TOG_W = 26.f, TOG_H = 22.f;
-    constexpr float MX_W = 46.f, MX_H = 20.f;      // Matrix toggle (fits "0 X 0")
+    constexpr float MX_W = 46.f, MX_H = 20.f;
 
     void drawToggleBox(CCDrawNode* d, bool on) {
         d->clear();
         bool mx = fxKind() == Kind::Matrix;
         float w = mx ? MX_W : TOG_W, h = mx ? MX_H : TOG_H;
         if (mx) {
-            // no checkbox: a solid black block, green binary when ON and red + "corrupted" when OFF
             CCPoint v[4] = { { 0.f, 0.f }, { w, 0.f }, { w, h }, { 0.f, h } };
             if (on) {
                 d->drawPolygon(v, 4, pm(0.f, 0.f, 0.f), 1.2f, pm(0.f, 0.95f, 0.30f, 0.9f));
             } else {
                 d->drawPolygon(v, 4, pm(0.f, 0.f, 0.f), 1.2f, pm(1.f, 0.2f, 0.2f, 0.9f));
-                for (int i = 0; i < 2; ++i) {                       // random torn strips, drawn once per state change
+                for (int i = 0; i < 2; ++i) {
                     float y = cky::fx::rf(3.f, h - 3.f), x = cky::fx::rf(2.f, w - 14.f);
                     d->drawSegment({ x, y }, { x + cky::fx::rf(6.f, 12.f), y }, 0.5f, pm(1.f, 0.35f, 0.35f, 0.8f));
                 }
@@ -235,7 +210,7 @@ namespace {
             CCPoint v[6] = { { c, 0.f }, { w - c, 0.f }, { w, h / 2.f }, { w - c, h }, { c, h }, { 0.f, h / 2.f } };
             d->drawPolygon(v, 6, on ? pm(0.01f, 0.14f, 0.20f) : pm(0.07f, 0.08f, 0.10f), 1.6f,
                            on ? pm(0.f, 0.95f, 1.f) : pm(0.22f, 0.24f, 0.28f));
-            float kx = on ? w - 9.f : 9.f, cy = h / 2.f;               // knob: left = OFF, right = ON
+            float kx = on ? w - 9.f : 9.f, cy = h / 2.f;
             CCPoint k[6] = { { kx - 3.f, cy - 4.f }, { kx + 3.f, cy - 4.f }, { kx + 5.f, cy },
                              { kx + 3.f, cy + 4.f }, { kx - 3.f, cy + 4.f }, { kx - 5.f, cy } };
             d->drawPolygon(k, 6, on ? pm(0.65f, 1.f, 1.f) : pm(0.25f, 0.27f, 0.31f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
@@ -244,9 +219,9 @@ namespace {
             chamferPts(v, 0.f, 0.f, w, h, 5.f);
             d->drawPolygon(v, 8, pm(0.11f, 0.03f, 0.02f), 1.8f, on ? pm(1.f, 0.42f, 0.08f) : pm(0.55f, 0.20f, 0.10f));
             CCPoint in[8];
-            chamferPts(in, 3.f, 3.f, w - 3.f, h - 3.f, 3.5f);          // magma core
+            chamferPts(in, 3.f, 3.f, w - 3.f, h - 3.f, 3.5f);
             d->drawPolygon(in, 8, on ? pm(0.62f, 0.13f, 0.03f) : pm(0.25f, 0.07f, 0.04f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
-            ccColor4F glow = pm(1.f, 0.60f, 0.15f, on ? 0.95f : 0.35f); // glowing cracks
+            ccColor4F glow = pm(1.f, 0.60f, 0.15f, on ? 0.95f : 0.35f);
             d->drawSegment({ w * .18f, h * .28f }, { w * .42f, h * .42f }, 0.5f, glow);
             d->drawSegment({ w * .42f, h * .42f }, { w * .50f, h * .22f }, 0.5f, glow);
             d->drawSegment({ w * .62f, h * .80f }, { w * .84f, h * .60f }, 0.5f, glow);
@@ -265,38 +240,33 @@ namespace {
             CCPoint v[20];
             int n = roundRect(v, 0.f, 0.f, w, h, 7.f);
             d->drawPolygon(v, n, on ? pm(1.f, 0.84f, 0.78f) : pm(1.f, 0.94f, 0.95f), 2.f, pm(1.f, 0.69f, 0.63f));
-            if (on) {                                                    // blush when ON
+            if (on) {
                 d->drawDot({ 4.5f, 4.5f }, 2.2f, pm(1.f, 0.62f, 0.68f, 0.6f));
                 d->drawDot({ w - 4.5f, 4.5f }, 2.2f, pm(1.f, 0.62f, 0.68f, 0.6f));
             }
         }
     }
 
-    // the check, drawn around (0,0) so it can pop-scale about its centre
     void drawToggleCheck(CCDrawNode* d) {
         d->clear();
         float w = TOG_W, h = TOG_H;
         if (fxKind() == Kind::Cyber) {
-            // neon halo + inner glow of the ON switch. The holder node breathes (scale action), nothing is redrawn.
             float c = 6.f, hw = w / 2.f + 1.5f, hh = h / 2.f + 1.5f;
             CCPoint v[6] = { { -hw + c, -hh }, { hw - c, -hh }, { hw, 0.f }, { hw - c, hh }, { -hw + c, hh }, { -hw, 0.f } };
             d->drawPolygon(v, 6, pm(0.f, 0.9f, 1.f, 0.12f), 3.4f, pm(0.f, 0.95f, 1.f, 0.38f));
         } else if (fxKind() == Kind::Lava) {
             CCPoint a(w * -.26f, h * .02f), b(w * -.07f, h * -.22f), c(w * .30f, h * .26f);
-            d->drawSegment(a, b, 1.7f, pm(1.f, 0.50f, 0.06f));          // orange check
+            d->drawSegment(a, b, 1.7f, pm(1.f, 0.50f, 0.06f));
             d->drawSegment(b, c, 1.7f, pm(1.f, 0.50f, 0.06f));
-            d->drawSegment(a, b, 0.6f, pm(1.f, 0.82f, 0.35f, 0.9f));    // hot core
+            d->drawSegment(a, b, 0.6f, pm(1.f, 0.82f, 0.35f, 0.9f));
             d->drawSegment(b, c, 0.6f, pm(1.f, 0.82f, 0.35f, 0.9f));
         } else {
             drawPawCC(d, 0.f, -0.5f, 7.5f, 0.f, pm(1.f, 0.52f, 0.58f));
         }
     }
 
-    // ---- Matrix toggle click: the text scrolls random characters, then locks in left to right (~0.5 s) ----
-    // A tiny node that lives NEXT TO the label (CCLabelBMFont is a sprite batch node: it only takes sprites as
-    // children). It is only scheduled while a scramble runs, so an idle toggle costs nothing.
     class CkyScramble : public CCNode {
-        CCLabelBMFont* m_lbl = nullptr;     // sibling, same parent: they are always freed together
+        CCLabelBMFont* m_lbl = nullptr;
         char m_text[16] = {};
         ccColor3B m_col = { 255, 255, 255 };
         float m_t = 0.f, m_acc = 0.f;
@@ -305,7 +275,7 @@ namespace {
         static constexpr int TAG = 777;
         static void start(CCNode* holder, CCLabelBMFont* lbl, char const* text, ccColor3B col) {
             if (!holder || !lbl) return;
-            auto s = static_cast<CkyScramble*>(holder->getChildByTag(TAG));   // only this class ever uses TAG
+            auto s = static_cast<CkyScramble*>(holder->getChildByTag(TAG));
             if (!s) {
                 s = new CkyScramble();
                 if (!s->init()) { CC_SAFE_DELETE(s); lbl->setString(text); lbl->setColor(col); return; }
@@ -317,9 +287,9 @@ namespace {
             std::snprintf(s->m_text, sizeof(s->m_text), "%s", text);
             s->m_col = col;
             s->m_t = 0.f;
-            s->m_acc = 1.f;                                    // draw the first frame right away
+            s->m_acc = 1.f;
             s->m_salt = cky::fx::rnd();
-            lbl->setColor(ccc3(200, 255, 215));                // scrolling characters show pale, the final colour locks in
+            lbl->setColor(ccc3(200, 255, 215));
             s->scheduleUpdate();
         }
         static void cancel(CCNode* holder) {
@@ -330,7 +300,7 @@ namespace {
             if (!m_lbl) { this->unscheduleUpdate(); return; }
             m_t += dt;
             m_acc += dt;
-            if (m_acc < 1.f / 30.f) return;                    // 30 steps a second is a readable scroll
+            if (m_acc < 1.f / 30.f) return;
             m_acc = 0.f;
             char buf[16];
             uint32_t epoch = static_cast<uint32_t>(m_t * 30.f) + m_salt;
@@ -340,9 +310,6 @@ namespace {
         }
     };
 
-    // ---- floating particles inside the menu: rising embers (Lava) / click paws (Cat) / digital rain (Matrix) ----
-    // One CCDrawNode, cleared and redrawn at 30 Hz. Particles are killed the moment they would cross the box,
-    // and paws are pushed inside it when spawned, so nothing is ever drawn outside the menu.
     class CkyFx : public CCLayer {
     public:
         enum class Mode { Embers, Paws, Rain };
@@ -353,7 +320,7 @@ namespace {
         cky::fx::EmberPool m_embers;
         cky::fx::PawPool m_paws;
         cky::fx::RainSim m_rain;
-        static constexpr float RAIN_CELL = 9.f;               // Cocos px per rain cell
+        static constexpr float RAIN_CELL = 9.f;
         float m_acc = 0.f;
         bool  m_drawn = false;
 
@@ -376,7 +343,6 @@ namespace {
             return true;
         }
 
-        // never swallows: the buttons underneath still get the touch
         void registerWithTouchDispatcher() override {
             CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -700, false);
         }
@@ -393,13 +359,10 @@ namespace {
 
         void update(float dt) override {
             m_acc += dt;
-            // 30 Hz is plenty and keeps Android cool; the rain is faint, so 20 Hz
             if (m_acc < (m_mode == Mode::Rain ? 1.f / 20.f : 1.f / 30.f)) return;
             float step = std::min(m_acc, 0.1f);
             m_acc = 0.f;
             if (m_mode == Mode::Rain) {
-                // Faint green rain at 0.2 opacity: columns of tiny "1" bars and "0" boxes. One draw node, cleared and
-                // redrawn at 20 Hz (24 columns x 7 cells, ~170 shapes). A cell is skipped unless it is fully inside the card.
                 m_rain.step(step, RAIN_CELL, m_box);
                 m_dn->clear();
                 float hh = RAIN_CELL * 0.38f, ww = RAIN_CELL * 0.22f;
@@ -412,10 +375,10 @@ namespace {
                         float a = cky::fx::RainSim::cellAlpha(k) * cky::fx::kRainAlpha;
                         ccColor4F col = k == 0 ? pm(0.75f, 1.f, 0.8f, a) : pm(0.f, 1.f, 0.35f, a);
                         if (m_rain.bit(i, k)) {
-                            m_dn->drawSegment({ x, y - hh }, { x, y + hh }, 0.7f, col);              // "1"
+                            m_dn->drawSegment({ x, y - hh }, { x, y + hh }, 0.7f, col);
                         } else {
                             CCPoint q[4] = { { x - ww, y - hh }, { x + ww, y - hh }, { x + ww, y + hh }, { x - ww, y + hh } };
-                            m_dn->drawPolygon(q, 4, pm(0.f, 0.f, 0.f, 0.f), 0.7f, col);               // "0"
+                            m_dn->drawPolygon(q, 4, pm(0.f, 0.f, 0.f, 0.f), 0.7f, col);
                         }
                     }
                 }
@@ -426,7 +389,7 @@ namespace {
                     if (!q.alive) continue;
                     float a = cky::fx::EmberPool::alphaOf(q);
                     auto c = cky::fx::emberColor(q.age / q.life);
-                    if (q.size > 1.6f) m_dn->drawDot({ q.x, q.y }, q.size * 2.2f, pmc(c, a * 0.22f)); // soft glow
+                    if (q.size > 1.6f) m_dn->drawDot({ q.x, q.y }, q.size * 2.2f, pmc(c, a * 0.22f));
                     m_dn->drawDot({ q.x, q.y }, q.size, pmc(c, a));
                 }
             } else {
@@ -442,7 +405,6 @@ namespace {
             }
         }
 
-        // Cyber: faint glowing grid. Drawn ONCE (34 lines + a few glow dots), zero per-frame cost.
         static CCDrawNode* makeGrid(float w, float h) {
             auto d = CCDrawNode::create();
             constexpr float STEP = 20.f;
@@ -463,25 +425,22 @@ namespace {
                 if ((ix % 4) != 3) continue;
                 iy = 0;
                 for (float y = -h / 2.f + STEP; y < h / 2.f - 1.f; y += STEP, ++iy)
-                    if ((iy % 4) == 3) d->drawDot({ x, y }, 1.5f, pm(0.f, 0.9f, 1.f, 0.14f));   // glowing intersections
+                    if ((iy % 4) == 3) d->drawDot({ x, y }, 1.5f, pm(0.f, 0.9f, 1.f, 0.14f));
             }
             return d;
         }
 
-        // Cyber: the scanning laser. Drawn ONCE (a core + soft bands, none overlapping) and then just moved up and
-        // down by a repeating action: no redraw, no update(). It sits BEHIND the widgets and the text (z = 1), so it
-        // can never make a label hard to read. w = card width, h = window height. The bands stay inside the card.
         static CCDrawNode* makeLaser(float w, float h) {
             auto d = CCDrawNode::create();
             float half = w / 2.f - 3.f;
-            for (int i = 0; i < 4; ++i) {                       // soft bands, thicker than before, never overlapping
+            for (int i = 0; i < 4; ++i) {
                 float off = 2.f + static_cast<float>(i) * 2.2f;
                 float a = 0.10f * (1.f - static_cast<float>(i) / 4.f);
                 d->drawSegment({ -half, off },  { half, off },  1.8f, pm(0.f, 1.f, 1.f, a));
                 d->drawSegment({ -half, -off }, { half, -off }, 1.8f, pm(0.f, 1.f, 1.f, a));
             }
             d->drawSegment({ -half, 0.f }, { half, 0.f }, 1.6f, pm(0.5f, 1.f, 1.f, 0.70f));
-            float travel = h / 2.f - 12.f;                      // top edge to bottom edge of the window (bands stay inside it)
+            float travel = h / 2.f - 12.f;
             d->setPosition({ 0.f, -travel });
             d->runAction(CCRepeatForever::create(CCSequence::create(
                 CCEaseSineInOut::create(CCMoveTo::create(3.8f, ccp(0.f, travel))),
@@ -489,7 +448,6 @@ namespace {
             return d;
         }
 
-        // Cat: static scattered paws, 0.4 opacity, different sizes. Drawn ONCE, zero per-frame cost.
         static CCDrawNode* makeBgPaws(float w, float h) {
             auto d = CCDrawNode::create();
             ccColor4F col = pmc(cky::fx::kPeach, cky::fx::kBgPawAlpha);
@@ -507,8 +465,8 @@ namespace {
 class CkyPanel : public CCNode {
     CCNode* m_host = nullptr;
     CCNode* m_content = nullptr;
-    CCNode* m_rows = nullptr;       // everything that scrolls
-    CCMenu* m_menu = nullptr;       // buttons inside m_rows
+    CCNode* m_rows = nullptr;
+    CCMenu* m_menu = nullptr;
     CCMenu* m_tabMenu = nullptr;
     CCMenu* m_scrollMenu = nullptr;
     float   m_y = 0.f;
@@ -516,9 +474,8 @@ class CkyPanel : public CCNode {
     float   m_off = 0.f;
     float   m_maxOff = 0.f;
     int     m_tab = 0;
-    bool    m_anim = false;         // true only while a toggle was just tapped: the check pops in
+    bool    m_anim = false;
     std::vector<CCNode*> m_hidden;
-    // Matrix: one label at a time gets a character swapped to a red / white symbol for a split second
     CCLabelBMFont* m_glLbl = nullptr;
     std::string    m_glOrig, m_glShown;
     int            m_glIdx = -1;
@@ -532,7 +489,6 @@ public:
         return nullptr;
     }
 
-    // hide the host's buttons so they can't be pressed through the panel
     void attachTo(CCNode* host) {
         m_host = host;
         if (auto kids = host->getChildren()) {
@@ -549,7 +505,6 @@ public:
         host->addChild(this, 2000);
     }
 
-    // black-outlined button
     CCMenuItemSpriteExtra* makeBtn(CCMenu* menu, SEL_MenuHandler cb, int tag,
                                    float x, float y, float w, float h,
                                    char const* text, ccColor3B color, float ls = 0.35f) {
@@ -559,8 +514,6 @@ public:
 
         Kind kind = fxKind();
         if (drawnBtn(kind)) {
-            // Lava: chamfered corners + hot rim. Cyber: chamfered + glowing cyan outline. Matrix: flat black + green
-            // border. All in one draw node (tag 1), repainted by paint()
             auto bg = CCDrawNode::create();
             bg->setTag(1);
             drawKindBtn(bg, w, h, color);
@@ -595,14 +548,11 @@ public:
         auto item = CCMenuItemSpriteExtra::create(node, this, cb);
         item->setTag(tag);
         item->setPosition({x, y});
-        // Cat: springier press. GD's own button animation does the bounce (grow on touch, bounce back on
-        // release), we just raise how far it grows. No extra actions, no cost.
         if (kind == Kind::Cat) item->m_scaleMultiplier = 1.16f;
         menu->addChild(item);
         return item;
     }
 
-    // Cat / Lava toggle box (replaces the ON/OFF pill): a box that gets a check when ON
     CCMenuItemSpriteExtra* makeToggle(CCMenu* menu, int tag, float x, float y) {
         bool mx = fxKind() == Kind::Matrix;
         float tw = mx ? MX_W : TOG_W, th = mx ? MX_H : TOG_H;
@@ -615,12 +565,11 @@ public:
         drawToggleBox(bg, false);
         node->addChild(bg, 0);
 
-        auto holder = CCNode::create();                    // scales about its centre
-        holder->setTag(3);                                 // (its visibility is also "is this toggle ON")
+        auto holder = CCNode::create();
+        holder->setTag(3);
         holder->setPosition({tw / 2.f, th / 2.f});
         holder->setVisible(false);
         if (mx) {
-            // Matrix: no check. The block shows binary text: "1 0 1" green = ON, "0 X 0" red = OFF
             auto bin = CCLabelBMFont::create(cky::fx::kBinOff, "bigFont.fnt");
             bin->setScale(0.34f);
             bin->setColor(ccc3(255, 50, 50));
@@ -642,13 +591,12 @@ public:
         return item;
     }
 
-    // returns true when the toggle actually changed state (so callers can react only to a real change)
     static bool paintToggle(CCMenuItemSpriteExtra* it, bool on, bool animate) {
         auto n = it ? it->getNormalImage() : nullptr;
         if (!n) return false;
         auto bg = typeinfo_cast<CCDrawNode*>(n->getChildByTag(1));
         auto chk = n->getChildByTag(3);
-        if (!bg || !chk || chk->isVisible() == on) return false;  // nothing changed -> nothing to redraw
+        if (!bg || !chk || chk->isVisible() == on) return false;
         drawToggleBox(bg, on);
         chk->stopAllActions();
         chk->setVisible(on);
@@ -658,7 +606,7 @@ public:
             char const* txt = on ? cky::fx::kBinOn : cky::fx::kBinOff;
             ccColor3B col = on ? ccc3(0, 255, 80) : ccc3(255, 50, 50);
             if (animate) {
-                CkyScramble::start(n, lbl, txt, col);       // glitch through random characters, then lock in
+                CkyScramble::start(n, lbl, txt, col);
             } else {
                 CkyScramble::cancel(n);
                 lbl->setString(txt);
@@ -673,8 +621,8 @@ public:
             } else {
                 chk->setScale(1.f);
             }
-            if (fxKind() == Kind::Cyber) {                 // neon ring breathes while ON: one scale action, no redraw
-                float t = 0.55f + 0.2f * static_cast<float>(cky::fx::rnd() & 3u) / 3.f;   // desync the switches a little
+            if (fxKind() == Kind::Cyber) {
+                float t = 0.55f + 0.2f * static_cast<float>(cky::fx::rnd() & 3u) / 3.f;
                 chk->runAction(CCRepeatForever::create(CCSequence::create(
                     CCDelayTime::create(animate ? 0.25f : 0.f),
                     CCEaseSineInOut::create(CCScaleTo::create(t, 1.10f)),
@@ -684,7 +632,6 @@ public:
         return true;
     }
 
-    // small bordered button with a drawn gear on it
     CCMenuItemSpriteExtra* makeGear(CCMenu* menu, int tag, float x, float y) {
         auto it = makeBtn(menu, menu_selector(CkyPanel::onBtn), tag, x, y, 24.f, 20.f, "", kBtn);
         if (auto n = it->getNormalImage()) {
@@ -696,7 +643,7 @@ public:
             for (int i = 0; i < 8; ++i) {
                 float a = static_cast<float>(i) * 3.14159265f / 4.f;
                 float dx = std::cos(a), dy = std::sin(a);
-                float px = -dy, py = dx; // perpendicular
+                float px = -dy, py = dx;
                 float r0 = 4.f, r1 = 8.2f, w = 1.5f;
                 CCPoint q[4] = {
                     { cx + dx * r0 + px * w, cy + dy * r0 + py * w },
@@ -718,7 +665,7 @@ public:
         if (auto n = it->getNormalImage()) {
             auto b = n->getChildByTag(1);
             if (auto bg = typeinfo_cast<CCScale9Sprite*>(b)) bg->setColor(c);
-            else if (auto d = typeinfo_cast<CCDrawNode*>(b)) {   // Lava / Cyber / Matrix buttons are draw nodes
+            else if (auto d = typeinfo_cast<CCDrawNode*>(b)) {
                 auto sz = n->getContentSize();
                 drawKindBtn(d, sz.width, sz.height, c);
             }
@@ -748,8 +695,6 @@ public:
         paint(it, on ? kOn : kOff);
     }
 
-    // Cyber: the row's text is bright neon cyan when ON and dark grey when OFF. A real tap "boots it up":
-    // it fades from dark to bright. One tint action per tap, nothing per frame.
     void tintRowLabel(int tag, bool on, bool boot) {
         auto l = typeinfo_cast<CCLabelBMFont*>(m_rows ? m_rows->getChildByTag(LBL_TAGS + tag) : nullptr);
         if (!l) return;
@@ -762,10 +707,9 @@ public:
         }
     }
 
-    // ---- Matrix: label glitch (one label at a time, ~0.1 s, about twice a second) ----
     void glitchRestore() {
         if (m_glLbl) {
-            if (m_glShown == m_glLbl->getString()) m_glLbl->setString(m_glOrig.c_str());   // nobody changed it meanwhile
+            if (m_glShown == m_glLbl->getString()) m_glLbl->setString(m_glOrig.c_str());
             if (auto ch = typeinfo_cast<CCSprite*>(m_glLbl->getChildByTag(m_glIdx))) ch->setColor(ccc3(255, 255, 255));
         }
         m_glLbl = nullptr;
@@ -820,7 +764,6 @@ public:
         }
     }
 
-    // ---- rows ----
     void nextRow(float h = ROW) {
         m_lowest = std::min(m_lowest, m_y);
         m_y -= h;
@@ -838,7 +781,7 @@ public:
 
     void rowPill(char const* text, int tag) {
         auto lbl = rowLabel(text);
-        if (fxKind() == Kind::Cyber) {                    // toggle rows: dark grey until switched ON
+        if (fxKind() == Kind::Cyber) {
             lbl->setTag(LBL_TAGS + tag);
             lbl->setColor(kCyberRowOff);
         }
@@ -882,7 +825,6 @@ public:
         nextRow(22.f);
     }
 
-    // label + a color swatch (drawn in refresh())
     void rowSwatch(char const* text, int tag) {
         rowLabel(text);
         auto sw = CCDrawNode::create();
@@ -911,7 +853,6 @@ public:
         nextRow(18.f);
     }
 
-    // ---- scrolling ----
     void applyScroll() {
         m_rows->setPositionY(m_off);
         auto cull = [&](CCNode* c) {
@@ -934,17 +875,14 @@ public:
         applyScroll();
     }
 
-    // ---- Molten rocks window: chamfered card + sidebar, glowing heated-metal gradient border ----
-    // Static, drawn once. The border is layered OPAQUE strokes (wide+dim -> thin+bright) so it glows without
-    // any alpha-overlap beads, and each stroke piece is coloured by its height: hot at the top, deep red below.
     void buildLavaChrome(float W, float H) {
         auto d = CCDrawNode::create();
-        float cc = 14.f;                                       // window chamfer
+        float cc = 14.f;
         ccColor3B card = kCard, side = kSide;
         {
             CCPoint v[8];
             chamferPts(v, -W / 2.f + 1.f, -H / 2.f + 1.f, W / 2.f - 1.f, H / 2.f - 1.f, cc);
-            d->drawPolygon(v, 8, pm3(card, 1.f), 0.f, pm(0.f, 0.f, 0.f, 0.f));   // fully opaque
+            d->drawPolygon(v, 8, pm3(card, 1.f), 0.f, pm(0.f, 0.f, 0.f, 0.f));
         }
         {
             CCPoint v[8];
@@ -976,14 +914,13 @@ public:
                 }
             }
         };
-        stroke(5.f, 0.22f);     // outer glow
+        stroke(5.f, 0.22f);
         stroke(3.6f, 0.50f);
         stroke(2.2f, 0.80f);
-        stroke(1.0f, 1.00f);    // white-hot core line
+        stroke(1.0f, 1.00f);
         this->addChild(d, 1);
     }
 
-    // ---- build ----
     bool init() override {
         if (!CCNode::init()) return false;
         this->setID("cky-panel");
@@ -991,7 +928,6 @@ public:
         float W = 440.f, H = 270.f;
 
         Kind kind = fxKind();
-        // the box particles live in (card interior, a few px in so chamfered corners stay clear)
         cky::fx::Rect box{ -(W - 12.f) / 2.f + 4.f, -(H - 12.f) / 2.f + 4.f,
                             (W - 12.f) / 2.f - 4.f,  (H - 12.f) / 2.f - 4.f };
 
@@ -1008,7 +944,7 @@ public:
             auto card = CCScale9Sprite::create("square02_001.png");
             card->setContentSize({W - 12.f, H - 12.f});
             card->setColor(kCard);
-            card->setOpacity(255);   // menus are always fully opaque
+            card->setOpacity(255);
             this->addChild(card, 1);
 
             auto side = CCScale9Sprite::create("square02_001.png");
@@ -1019,16 +955,16 @@ public:
         }
 
         if (kind == Kind::Cat) {
-            this->addChild(CkyFx::makeBgPaws(W - 12.f, H - 12.f), 2);               // scattered paws, 0.4 opacity
-            this->addChild(CkyFx::create(CkyFx::Mode::Paws, box), 6);               // click paws, on top
+            this->addChild(CkyFx::makeBgPaws(W - 12.f, H - 12.f), 2);
+            this->addChild(CkyFx::create(CkyFx::Mode::Paws, box), 6);
         } else if (kind == Kind::Lava) {
-            this->addChild(CkyFx::create(CkyFx::Mode::Embers, box), 2);             // rising embers, behind the widgets
+            this->addChild(CkyFx::create(CkyFx::Mode::Embers, box), 2);
         } else if (kind == Kind::Matrix) {
-            this->addChild(CkyFx::create(CkyFx::Mode::Rain, box), 2);               // faint digital rain, behind the widgets
-            this->scheduleUpdate();                                                 // label glitch ticker
+            this->addChild(CkyFx::create(CkyFx::Mode::Rain, box), 2);
+            this->scheduleUpdate();
         } else if (kind == Kind::Cyber) {
-            this->addChild(CkyFx::makeGrid(W - 12.f, H - 12.f), 1);                 // glowing grid (above the card, under the sidebar)
-            this->addChild(CkyFx::makeLaser(W - 12.f, H), 1);                       // scanning laser, BEHIND the widgets and text
+            this->addChild(CkyFx::makeGrid(W - 12.f, H - 12.f), 1);
+            this->addChild(CkyFx::makeLaser(W - 12.f, H), 1);
         }
 
         auto title = CCLabelBMFont::create("ChxrCky", "bigFont.fnt");
@@ -1069,7 +1005,7 @@ public:
 
     void buildTab(int tab) {
         m_tab = tab;
-        m_glLbl = nullptr;                        // its row is about to be freed
+        m_glLbl = nullptr;
         if (m_content) m_content->removeFromParent();
         m_content = CCNode::create();
         this->addChild(m_content, 5);
@@ -1080,7 +1016,6 @@ public:
         m_menu->setPosition({0.f, 0.f});
         m_rows->addChild(m_menu, 1);
 
-        // scroll buttons (shown only when the tab has more rows than fit)
         m_scrollMenu = CCMenu::create();
         m_scrollMenu->setPosition({0.f, 0.f});
         m_content->addChild(m_scrollMenu, 2);
@@ -1197,6 +1132,7 @@ public:
             rowValue("FPS (max 30)", B_RN_FPS_DN, B_RN_FPS_UP, L_RN_FPS);
             rowValue("Bitrate Mbps", B_RN_BR_DN, B_RN_BR_UP, L_RN_BR);
             rowInfo(L_RN_FILT);
+            rowWide("Help: auto-set size for my phone", B_RN_HELP);
             rowWide("Start render (arm)", B_RN_START);
             rowWide("Stop render", B_RN_STOP);
             rowInfo(L_RN_HINT);
@@ -1224,7 +1160,7 @@ public:
     }
 
     void refreshTabs() {
-        int active = (m_tab == 6 || m_tab == 7) ? 3 : m_tab; // HUD settings / Hitbox trail belong to Display
+        int active = (m_tab == 6 || m_tab == 7) ? 3 : m_tab;
         for (int i = 0; i <= PAGE_RENDER; ++i) {
             auto it = typeinfo_cast<CCMenuItemSpriteExtra*>(m_tabMenu->getChildByTag(TAB_BASE + i));
             paint(it, i == active ? kAccent : kTab);
@@ -1300,7 +1236,6 @@ public:
         setText(L_FI, fmt::format("{}", cky::fixInterval));
         cky::makeMacroFolders();
         setText(L_THEME, thm().name);
-        // long names (e.g. "Molten rocks") shrink so they still fit between the +/- buttons
         if (m_rows) {
             if (auto l = typeinfo_cast<CCLabelBMFont*>(m_rows->getChildByTag(L_THEME))) {
                 size_t len = std::strlen(thm().name);
@@ -1315,9 +1250,8 @@ public:
             setText(L_RN_RES, fmt::format("{}p", R.cfg.height));
             setText(L_RN_FPS, fmt::format("{}", R.cfg.fps));
             setText(L_RN_BR, fmt::format("{}", R.cfg.bitrateMbps));
-            setText(L_RN_FILT, R.cfg.filters.empty() ? std::string("Filters: none (edit in ImGui menu)")
-                                                     : "Filters: " + R.cfg.filters.substr(0, 22));
-            std::string st = !R.available() ? "Needs the FFmpeg API mod"
+            setText(L_RN_FILT, "Encoder: built-in (Android)");
+            std::string st = !R.available() ? "Android only"
                 : R.rendering() ? fmt::format("Rendering... {} frames", R.frames())
                 : R.phase() == chxr::Renderer::Phase::Armed ? "Armed: restart the level" : "Idle";
             setText(L_RN_STATUS, st);
@@ -1328,7 +1262,6 @@ public:
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))
             : std::string("High TPS: OFF (tap to cycle)"));
 }
-    // ---- handlers ----
     void onTab(CCObject* s) {
         buildTab(static_cast<CCNode*>(s)->getTag() - TAB_BASE);
     }
@@ -1432,7 +1365,7 @@ public:
         case T_TRAJ:
             cky::trajectory = !cky::trajectory;
             if (!cky::trajectory) ckyTrajClear();
-            else cky::dirty = true; // trajectory counts as a cheat: completion is blocked in safe mode
+            else cky::dirty = true;
             break;
         case T_FFIX:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
@@ -1453,7 +1386,7 @@ public:
             break;
         case T_STEPBTNS:
             cky::stepperBtns = !cky::stepperBtns;
-            if (!cky::stepperBtns) {      // no buttons left to unpause with: resume
+            if (!cky::stepperBtns) {
                 cky::frozen = false;
                 cky::pending = 0;
                 ckyApplyAudio();
@@ -1485,8 +1418,8 @@ public:
             break;
         default: break;
         }
-        cky::labelsSave(); // label switches are remembered between launches
-        m_anim = true;     // the check pops in only for a real tap, not when a tab is (re)built
+        cky::labelsSave();
+        m_anim = true;
         refresh();
         m_anim = false;
         ckyHudRefresh();
@@ -1495,7 +1428,6 @@ public:
     void onBtn(CCObject* s) {
         int t = static_cast<CCNode*>(s)->getTag();
         if (t >= B_TRC_BASE && t < B_TRC_BASE + 16) {
-            // hitbox trail color: R/G/B/opacity of the outer or inner hitbox, steps of 15/255
             int i = t - B_TRC_BASE;
             float* c = (i / 8 == 0) ? cky::trailOuter : cky::trailInner;
             int ch = (i % 8) / 2;
@@ -1513,13 +1445,13 @@ public:
         case B_RN_CODEC_DN:
         case B_RN_CODEC_UP: {
             auto list = chxr::Renderer::codecs();
-            if (list.empty()) { ckyNotify("No codecs: FFmpeg API mod missing", false); break; }
+            if (list.empty()) { ckyNotify("No codecs available", false); break; }
             chxr::Renderer::get().cycleCodec(list, t == B_RN_CODEC_UP ? 1 : -1);
             break;
         }
         case B_RN_RES_DN:
         case B_RN_RES_UP:
-            chxr::Renderer::get().cycleRes(t == B_RN_RES_UP ? -1 : 1); // list runs big -> small
+            chxr::Renderer::get().cycleRes(t == B_RN_RES_UP ? -1 : 1);
             break;
         case B_RN_FPS_DN:
         case B_RN_FPS_UP:
@@ -1534,6 +1466,9 @@ public:
             break;
         case B_RN_STOP:
             chxr::Renderer::get().cancel();
+            break;
+        case B_RN_HELP:
+            ckyNotify(chxr::Renderer::get().autoSetup().c_str(), true);
             break;
         case B_TRL_DN:
         case B_TRL_UP:
@@ -1595,7 +1530,6 @@ public:
             break;
         case B_HUDOP_DN:
         case B_HUDOP_UP:
-            // in-level HUD only; the menus stay opaque. ckyHudRefresh() (end of this handler) redraws the HUD.
             cky::hudOpacity = std::clamp(std::round((cky::hudOpacity + (t == B_HUDOP_UP ? 0.05f : -0.05f)) * 100.f) / 100.f, 0.1f, 1.f);
             cky::hudOpacitySave();
             break;
@@ -1677,4 +1611,3 @@ void ckyOpenPanel(CCNode* host) {
     p->attachTo(host);
 }
 
-// END OF FILE (panel.cpp)

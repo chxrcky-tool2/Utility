@@ -1,28 +1,3 @@
-// framewindow.cpp — Frame Window Calculator
-//
-// What it does
-//   When a click reaches the game, it works out which physics steps around that click would also have
-//   survived (the "frame window"), using the same fake-player physics as Show trajectory:
-//     * steps AFTER the click: a fake player is run forward unclicked, a snapshot is taken at each of the next
-//       `fwAhead` steps, and a click is tested from each of them;
-//     * steps BEFORE the click: a small ring of snapshots (one per physics step, fixed buffers, no allocation)
-//       gives the state `fwBack` steps ago, and a click is tested from each of those too.
-//   A click "survives" when the fake player lives for `fwLook` steps after it (the button stays held).
-//   The surviving offsets form one interval, so its two edges are found by bisection (about 8 simulated
-//   branches instead of 21), and a time budget stops the work if a device is slow.
-//
-// Cost / lag
-//   Nothing is simulated per frame. A click queues one request; it runs once, after the frame
-//   (PlayLayer::postUpdate), never inside the physics step. The only per-step work is the snapshot ring
-//   (about 1 memcpy of a few hundred bytes), and only while the calculator is on.
-//   Memory is static (about 0.2 MB) and nothing is allocated while playing, so there is nothing to leak.
-//
-// Window -> FPS
-//   Physics runs at a fixed rate (240 steps/s). A click made at F FPS can only land on a frame boundary,
-//   which comes every 240/F steps. A window of W steps is therefore GUARANTEED at F FPS when
-//   W >= ceil(240/F), and only POSSIBLE (chance about W / (240/F)) below that.
-//   Tiers shown: 60 / 120 / 240 FPS  (1 step = 240 FW, 2-3 steps = 120 FW, 4+ steps = 60 FW).
-//   The result is computed at once (bounded, one bisection); the label then COUNTS it out slowly (fwSpeed).
 #include "state.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 #include <array>
@@ -33,17 +8,16 @@ namespace {
 
     constexpr int    MAX_AHEAD = 10;
     constexpr int    MAX_BACK = 10;
-    constexpr int    RING = MAX_BACK + 1;      // snapshots kept per player, newest = the step being processed
-    constexpr double BUDGET_MS = 6.0;          // stop simulating after this long (then the result is flagged incomplete)
-    constexpr int    CONFIRM_STEPS = 30;       // the player must stay alive this long after a perfect click for the jingle
+    constexpr int    RING = MAX_BACK + 1;
+    constexpr double BUDGET_MS = 6.0;
+    constexpr int    CONFIRM_STEPS = 30;
 
-    // ---- snapshot storage (static: nothing is allocated while playing) ----
-    CkySimSnap g_ring[2][RING];                // rolling: states at the start of the last RING physics steps
-    int        g_head[2] = { -1, -1 };         // index of the newest entry
-    CkySimSnap g_back[2][RING];                // copy taken at the click: [k] = state k steps BEFORE the click step
-    int        g_backAvail[2] = { -1, -1 };    // highest k that is valid
-    CkySimSnap g_base[2][MAX_AHEAD + 1];       // [o] = state o steps AFTER the click step (no click made), o >= 1
-    int        g_baseOk[2] = { 0, 0 };         // highest o that is valid (the player lives that long unclicked)
+    CkySimSnap g_ring[2][RING];
+    int        g_head[2] = { -1, -1 };
+    CkySimSnap g_back[2][RING];
+    int        g_backAvail[2] = { -1, -1 };
+    CkySimSnap g_base[2][MAX_AHEAD + 1];
+    int        g_baseOk[2] = { 0, 0 };
     bool       g_overflow = false;
 
     struct Request { bool on = false; int mask = 0; uint32_t step = 0; };
@@ -55,7 +29,7 @@ namespace {
     CkyFwResult g_res;
     uint32_t    g_resId = 0;
 
-    Ref<PlayerObject> g_a, g_b;                // a = unclicked path, b = click branches
+    Ref<PlayerObject> g_a, g_b;
 
     struct TrajGuard {
         bool prev;
@@ -67,9 +41,6 @@ namespace {
         return std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // ring
-    // ---------------------------------------------------------------------------------------------
     PlayerObject* playerOf(GJBaseGameLayer* l, int pi) { return pi == 0 ? l->m_player1 : l->m_player2; }
 
     void captureRing(GJBaseGameLayer* l) {
@@ -93,9 +64,6 @@ namespace {
         }
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // simulation (same order as trajectory.cpp: collisions, input, update)
-    // ---------------------------------------------------------------------------------------------
     bool stepFake(PlayLayer* pl, PlayerObject* f, float dt, bool pushNow) {
         if (f->m_collisionLogTop)    f->m_collisionLogTop->removeAllObjects();
         if (f->m_collisionLogBottom) f->m_collisionLogBottom->removeAllObjects();
@@ -118,7 +86,6 @@ namespace {
         CCPoint kill{ 0.f, 0.f };
     };
 
-    // click on the first step, hold, and see whether the fake player is still alive `steps` later
     Verdict runBranch(PlayLayer* pl, CkySimSnap const& s, int steps, float dt) {
         Verdict v;
         PlayerObject* f = g_b.data();
@@ -140,7 +107,7 @@ namespace {
         float dt = 1.f / 240.f;
         int look = 90;
         int mask = 1;
-        int fAvail = 0, bAvail = 0;            // testable offsets: [-bAvail, +fAvail]
+        int fAvail = 0, bAvail = 0;
         int8_t cache[MAX_BACK + MAX_AHEAD + 1];
         bool hasK[MAX_BACK + MAX_AHEAD + 1];
         CCPoint kpos[MAX_BACK + MAX_AHEAD + 1];
@@ -155,7 +122,6 @@ namespace {
         return (o <= g_baseOk[pi]) ? &g_base[pi][o] : nullptr;
     }
 
-    // would a click made `o` steps from the real one survive? (cached; o is within [-MAX_BACK, MAX_AHEAD])
     bool validAt(Ctx& c, int o) {
         int idx = o + MAX_BACK;
         if (c.cache[idx] >= 0) return c.cache[idx] == 1;
@@ -178,7 +144,6 @@ namespace {
         return ok;
     }
 
-    // the surviving offsets are one interval around `center`; find both edges by bisection
     void expand(Ctx& c, int center, int& lo, int& hi) {
         int good = center, limit = c.fAvail;
         if (good < limit) {
@@ -208,15 +173,12 @@ namespace {
         lo = good;
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // jingle
-    // ---------------------------------------------------------------------------------------------
     void playJingle(bool force) {
         static std::string path;
-        static int state = 0; // 0 = not looked up yet, 1 = found, 2 = missing
+        static int state = 0;
         static double last = -100.0;
         if (state == 0) {
-            auto p = Mod::get()->getResourcesDir() / "jingle.wav";
+            auto p = cky::stdPath(Mod::get()->getResourcesDir()) / "jingle.wav";
             std::error_code ec;
             if (std::filesystem::exists(p, ec)) { path = p.string(); state = 1; }
             else {
@@ -235,7 +197,7 @@ namespace {
 
     void jingleTick(PlayLayer* pl) {
         if (!g_jingle.on) return;
-        if (cky::step < g_jingle.start) { g_jingle.on = false; return; } // level restarted
+        if (cky::step < g_jingle.start) { g_jingle.on = false; return; }
         for (int pi = 0; pi < 2; ++pi) {
             if (!(g_jingle.mask & (1 << pi))) continue;
             PlayerObject* p = playerOf(pl, pi);
@@ -268,9 +230,6 @@ namespace {
         g_res = CkyFwResult{};
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // the calculation (runs once per click, after the frame)
-    // ---------------------------------------------------------------------------------------------
     void runRequest(PlayLayer* pl) {
         if (!g_req.on) return;
         g_req.on = false;
@@ -294,7 +253,6 @@ namespace {
         c.fAvail = fWanted;
         c.bAvail = bWanted;
 
-        // 1) the unclicked path ahead: one snapshot per future step (also tells us how long the player lives unclicked)
         for (int pi = 0; pi < 2; ++pi) {
             if (!(c.mask & (1 << pi))) continue;
             g_baseOk[pi] = 0;
@@ -311,7 +269,6 @@ namespace {
             c.bAvail = std::min(c.bAvail, std::max(0, g_backAvail[pi]));
         }
 
-        // 2) is the real click inside a window, and how wide is that window?
         CkyFwResult r;
         r.stepHz = cky::effTps();
         int lo = 0, hi = 0;
@@ -320,7 +277,6 @@ namespace {
         if (hit) {
             expand(c, 0, lo, hi);
         } else {
-            // missed: nearest offset that would have survived, then its window
             bool found = false;
             int span = std::max(c.fAvail, c.bAvail);
             for (int d = 1; d <= span && !found; ++d) {
@@ -349,7 +305,6 @@ namespace {
         r.incomplete = c.timedOut;
         r.sims = c.sims;
 
-        // 3) where the label goes: the object that ends the window (just past its edge), else the player
         bool haveAnchor = false;
         auto tryAnchor = [&](int o) {
             if (haveAnchor || o < -MAX_BACK || o > MAX_AHEAD) return;
@@ -378,9 +333,6 @@ namespace {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// public
-// ---------------------------------------------------------------------------------------------
 void ckyFwCapture(GJBaseGameLayer* l) {
     if (!cky::fwOn || g_overflow || !l || cky::trajCreating) return;
     captureRing(l);
@@ -390,11 +342,10 @@ void ckyFwOnPress(GJBaseGameLayer* l, bool isPlayer1) {
     if (!cky::fwOn || g_overflow || cky::trajCreating || !l) return;
     auto pl = PlayLayer::get();
     if (!pl || static_cast<GJBaseGameLayer*>(pl) != l) return;
-    if (pl->m_levelSettings && pl->m_levelSettings->m_platformerMode) return; // classic mode only
+    if (pl->m_levelSettings && pl->m_levelSettings->m_platformerMode) return;
     if (!pl->m_player1 || pl->m_player1->m_isDead) return;
 
     bool dual = pl->m_gameState.m_isDualMode && pl->m_player2;
-    // generic lambda: a member that does not exist in this SDK just compiles away
     auto twoPlayerOf = [](auto* lay) -> bool {
         if constexpr (requires { lay->m_levelSettings->m_twoPlayerMode; }) {
             return lay->m_levelSettings && lay->m_levelSettings->m_twoPlayerMode;
@@ -406,7 +357,6 @@ void ckyFwOnPress(GJBaseGameLayer* l, bool isPlayer1) {
     int mask = (dual && !twoPlayer) ? 3 : (isPlayer1 ? 1 : 2);
     if ((mask & 2) && !pl->m_player2) return;
 
-    // injected (macro) presses can arrive before this step's ring entry exists: make sure it does
     captureRing(pl);
     if (g_overflow) return;
 
@@ -418,12 +368,12 @@ void ckyFwOnPress(GJBaseGameLayer* l, bool isPlayer1) {
             if (g_head[pi] < 0) break;
             int idx = ((g_head[pi] - k) % RING + RING) % RING;
             CkySimSnap const& e = g_ring[pi][idx];
-            if (!e.valid || e.step + static_cast<uint32_t>(k) != cky::step) break; // gap: rewind, restart or too early
+            if (!e.valid || e.step + static_cast<uint32_t>(k) != cky::step) break;
             cky::copySim(g_back[pi][k], e);
             avail = k;
         }
         g_backAvail[pi] = avail;
-        if (avail < 0) return; // no state for this step: skip this click
+        if (avail < 0) return;
     }
 
     g_req.on = true;
@@ -485,4 +435,3 @@ class $modify(CkyFwPlayLayer, PlayLayer) {
     }
 };
 
-// END OF FILE (framewindow.cpp)
