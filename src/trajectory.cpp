@@ -1,4 +1,3 @@
-// trajectory.cpp ChxrCky menu
 #include "state.hpp"
 #include "traj_fields.hpp"
 
@@ -9,9 +8,7 @@
 #include <unordered_set>
 
 namespace {
-    // portals the fake player needs to react to (size / speed); gravity+mode portals are ignored
     std::unordered_set<int> const kPortalIDs = { 101, 99, 11, 10, 200, 201, 202, 203, 1334 };
-    // object types that may collide with the fake player: 0 solid, 2 hazard, 47, 25
     std::unordered_set<int> const kSolidTypes = { 0, 2, 47, 25 };
 
     struct Traj {
@@ -26,12 +23,11 @@ namespace {
         CCPoint p1Hold[512];
         CCPoint p2Hold[512];
         bool loggedCopy = false;
-        bool hasKiller = false;      // a fake player died on an object (Frame Window Calculator reads it)
-        CCPoint killer{ 0.f, 0.f };  // top-centre of that object, object-layer coordinates
+        bool hasKiller = false;
+        CCPoint killer{ 0.f, 0.f };
     };
     Traj g_t;
 
-    // copies every listed member that exists in this SDK; returns names that were skipped
     std::string copyState(PlayerObject* dst, PlayerObject* src, int* okCount) {
         std::string skipped;
         int ok = 0;
@@ -134,7 +130,6 @@ namespace {
                 if (hold) fake->pushButton(static_cast<PlayerButton>(1));
                 else      fake->releaseButton(static_cast<PlayerButton>(1));
                 if (pl->m_levelSettings->m_platformerMode) {
-                    // keep moving in the direction the real player is going
                     fake->pushButton(static_cast<PlayerButton>(real->m_isGoingLeft ? 2 : 3));
                 }
             }
@@ -146,7 +141,7 @@ namespace {
             ccColor4F color = hold ? g_t.holdColor : g_t.freeColor;
             if (!hold) {
                 CCPoint ref = (isP2 ? g_t.p2Hold : g_t.p1Hold)[i];
-                if (ref == prev) color = g_t.sameColor; // both lines overlap here
+                if (ref == prev) color = g_t.sameColor;
             }
             if (i >= steps - 40) color.a = static_cast<float>(steps - i) / 40.f;
 
@@ -251,8 +246,7 @@ class $modify(CkyTrajPlayLayer, PlayLayer) {
 };
 
 class $modify(CkyTrajGameLayer, GJBaseGameLayer) {
-    // while simulating, only solids, hazards and size/speed portals can touch the fake player
-    void collisionCheckObjects(PlayerObject* p0, gd::vector<GameObject*>* objects, int p2, float p3) {
+    void collisionCheckObjects(PlayerObject* p0, std::vector<GameObject*>* objects, int p2, float p3) {
         if (!cky::trajCreating) return GJBaseGameLayer::collisionCheckObjects(p0, objects, p2, p3);
 
         std::vector<GameObject*> disabled;
@@ -309,4 +303,3 @@ class $modify(CkyTrajPlayer, PlayerObject) {
     }
 };
 
-// END OF FILE (trajectory.cpp)

@@ -1,10 +1,7 @@
-// clickbot.cpp — clickpack loader + click sounds
-// packs live in <game dir>/clicks/<PackName>/player1/{clicks,releases,softclicks,...}
 #include "state.hpp"
 #include <random>
 
 namespace {
-    // gaps between presses (seconds) that choose the click type: tweak to taste
     constexpr double HARD_GAP = 2.0;
     constexpr double NORMAL_GAP = 0.3;
     constexpr double SOFT_GAP = 0.08;
@@ -17,7 +14,7 @@ namespace {
     };
 
     Pack g_pack[2];
-    std::vector<std::string> g_names; // "" = the clicks folder itself
+    std::vector<std::string> g_names;
     bool g_scanned = false;
     std::mt19937 g_rng{ std::random_device{}() };
     double g_lastPress[2] = { -100.0, -100.0 };
@@ -28,7 +25,7 @@ namespace {
         return s;
     }
 
-    std::filesystem::path root() { return geode::dirs::getGameDir() / "clicks"; }
+    std::filesystem::path root() { return cky::stdPath(geode::dirs::getGameDir()) / "clicks"; }
 
     bool isDir(std::filesystem::path const& p) {
         std::error_code ec;
@@ -172,4 +169,3 @@ $on_mod(Loaded) {
     cky::clickVol = Mod::get()->getSavedValue<int>("click-vol", 100);
     cky::clickPack = Mod::get()->getSavedValue<int>("click-pack", 0);
 }
-// End of the file "Clickbot.cpp" omg omh

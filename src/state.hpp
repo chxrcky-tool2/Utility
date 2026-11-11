@@ -5,13 +5,25 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <array>
+#include <chrono>
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
 #include <sstream>
+#include <tuple>
+#include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <zstd.h>
 #include <string>
 #include <vector>
+#include "compat_v6.hpp"
 
 using namespace geode::prelude;
 
@@ -20,31 +32,28 @@ using namespace geode::prelude;
 #include "themes.hpp"
 #include "framewindow.hpp"
 
-// per-step player snapshot used by "Frame fixes" (position + rotation of both players)
 struct FrameFix {
     uint32_t frame;
     float x1, y1, r1;
     float x2, y2, r2;
-    double yv1 = 0.0, yv2 = 0.0; // vertical velocity of each player (CKY4)
-    bool   hasVel = true;        // false for fixes loaded from old CKY3 files
-    FixExtra e1, e2;             // on-ground / dash / jump-buffer state of each player (CKY5)
-    bool   hasExtra = false;     // false for fixes loaded from CKY3 / CKY4 files
+    double yv1 = 0.0, yv2 = 0.0;
+    bool   hasVel = true;
+    FixExtra e1, e2;
+    bool   hasExtra = false;
 };
 
-// one input that reached the game, tagged with the physics step it happened on (back step re-sim)
 struct LoggedInput {
     uint32_t step;
     bool     press;
-    int      btn; // low byte = button id, bit 8 (0x100) = player 2
+    int      btn;
 };
 
 struct MacroInput {
     uint32_t frame;
     bool     isPress;
-    int      playerButton; // low byte = button id, bit 8 (0x100) = player 2
+    int      playerButton;
 };
 
-// defined in other files
 void ckyHudRefresh(CCNode* hud = nullptr);
 CCNode* ckyHudNode();
 void ckyBuildHud(PlayLayer* pl);
@@ -54,7 +63,6 @@ void ckyOpenPanel(CCNode* host);
 void ckySetStartPosVisible(bool on);
 void ckyBuildStartPos(PlayLayer* pl);
 void ckyBuildOverlay(PlayLayer* pl);
-// labels (labels.cpp): FPS / startpos run / level time / best run
 void ckyBuildLabels(PlayLayer* pl);
 void ckyRunReset();
 void ckyRunBegin();
@@ -68,16 +76,14 @@ void ckyClickRescan();
 std::string ckyClickPackName();
 void ckyClickPackStep(int dir);
 bool ckyImportGdr();
-bool ckyTrajHandleDeath(PlayerObject* player, GameObject* object = nullptr); // true = it was a trajectory fake player
-// trajectory.cpp helpers shared with the Frame Window Calculator (framewindow.cpp)
+bool ckyTrajHandleDeath(PlayerObject* player, GameObject* object = nullptr);
 float ckyTrajStepDelta();
 void  ckyTrajResetCancel();
 bool  ckyTrajCancelled();
-bool  ckyTrajKiller(CCPoint* topCenter); // object that killed a fake player since the last reset
+bool  ckyTrajKiller(CCPoint* topCenter);
 void ckyTrajClear();
 bool ckyUiIsImGui();
 void ckyImGuiToggle();
-// frame stepper back step (backstep.cpp)
 void ckyBackStepCapture();
 void ckyBackStepClear();
 bool ckyBackStep();
@@ -85,7 +91,6 @@ size_t ckyBackStepCount();
 void ckyBackStepFinish();
 void ckyInputLog(bool down, int playerButton);
 void ckyInputLogReset();
-// hitbox trail (hitboxtrail.cpp)
 void ckyTrailCapture(GJBaseGameLayer* layer);
 void ckyTrailRewind(uint32_t step);
 void ckyTrailReset();
@@ -99,13 +104,11 @@ inline CCPoint ckyDefaultIconPos() {
 }
 
 namespace cky {
-    constexpr uint32_t MAGIC1 = 0x31594B43; // "CKY1"
-    constexpr uint32_t MAGIC2 = 0x32594B43; // "CKY2"
-    constexpr uint32_t MAGIC3 = 0x33594B43; // "CKY3" (CKY2 + frame fixes: position + rotation)
-    constexpr uint32_t MAGIC4 = 0x34594B43; // "CKY4" (CKY3 + vertical velocity in frame fixes)
-    constexpr uint32_t MAGIC5 = 0x35594B43; // "CKY5" (CKY4 + on-ground / dash / jump-buffer state in frame fixes)
-    // "CKZ5": a whole CKY5 file squeezed with Zstd. Layout: [magic][u32 raw size][zstd frame].
-    // The CKY5 payload inside is unchanged, so old CKY1-CKY5 files still load.
+    constexpr uint32_t MAGIC1 = 0x31594B43;
+    constexpr uint32_t MAGIC2 = 0x32594B43;
+    constexpr uint32_t MAGIC3 = 0x33594B43;
+    constexpr uint32_t MAGIC4 = 0x34594B43;
+    constexpr uint32_t MAGIC5 = 0x35594B43;
     constexpr uint32_t MAGICZ = 0x355A4B43;
     constexpr int ZSTD_LEVEL = 3;
     inline bool compressSaves = true;
@@ -125,15 +128,14 @@ namespace cky {
     inline bool     playArmed = false;
     inline int      slot = 1;
 
-    // frame fixes + trajectory
     inline std::vector<FrameFix> fixes;
     inline size_t   fixCursor = 0;
     inline bool     frameFixes = true;
-    inline int      fixInterval = 1;      // record a frame fix every N steps (in 240-TPS steps)
-    inline bool     fixVelocity = true;   // also restore vertical velocity on playback
+    inline int      fixInterval = 1;
+    inline bool     fixVelocity = true;
     inline bool     trajectory = false;
     inline bool     trajCreating = false;
-    inline int      trajLen = 200;        // simulated steps (60-480)
+    inline int      trajLen = 200;
 
     inline float    tps = 240.f;
     inline bool     tpsOn = true;
@@ -149,12 +151,9 @@ namespace cky {
     inline float    fps = 120.f;
     inline double   origInterval = 0.0;
 
-    // Headless physics (above 240 TPS): never let one frame spend more than headlessBudgetMs on physics.
-    // If the device can't keep up the game just runs a little slower than real time instead of
-    // freezing the frame, and the per-step display extras (hitbox trail, frame window) pause above 480 TPS.
     inline bool     headless = true;
-    inline float    headlessBudgetMs = 12.f;   // 4-30 ms of physics per frame
-    inline float    stepCostMs = 0.02f;        // measured cost of one physics step (moving average)
+    inline float    headlessBudgetMs = 12.f;
+    inline float    stepCostMs = 0.02f;
 
     inline float    actualTps = 0.f;
     inline uint32_t measSteps = 0;
@@ -164,11 +163,9 @@ namespace cky {
     inline bool     safeMode = true;
     inline bool     dirty = false;
     inline bool     hitboxes = false;
-    // hitbox trail: RGBA (0-1) of the outer and inner hitbox, length in physics steps
     inline bool     hitboxTrail = false;
-    // practice fixes (xdBot idea): re-apply the full player state after a checkpoint / anchor load
     inline bool     practiceFixes = true;
-    inline bool     anchoring = false;   // true while the back stepper takes its own snapshot
+    inline bool     anchoring = false;
     inline int      trailLen = 120;
     inline float    trailOuter[4] = { 1.f, 0.25f, 0.25f, 1.f };
     inline float    trailInner[4] = { 0.30f, 0.55f, 1.f, 1.f };
@@ -181,28 +178,23 @@ namespace cky {
     inline uint32_t clicksBest = 0;
     inline bool     ckptTelemetry = false;
     inline int      theme = 0;
-    // ThemeCount + every theme's colours live in themes.hpp
-    inline int      clickVol = 100;   // clickbot volume, percent (0-200)
-    inline float    tpsStep = 10.f;   // how much the TPS +/- buttons change
+    inline int      clickVol = 100;
+    inline float    tpsStep = 10.f;
     inline bool     imguiOpen = false;
-    inline bool     stepperBtns = true;  // frame stepper buttons exist in the level HUD
-    inline bool     speedBtns = true;    // speedhack buttons exist in the level HUD (off = 1.00x)
-    inline bool     hudStepShow = true;  // show the frame stepper box (top-left)
-    inline bool     hudSpeedShow = true; // show the speedhack box (top-right)
-    inline bool     backStepOn = true;   // keep rewind snapshots while the stepper is paused
-    // Rolling rewind buffer while playing. OFF by default: it calls createCheckpoint() (a full
-    // copy of the level state) on EVERY physics step, which is what capped real TPS.
+    inline bool     stepperBtns = true;
+    inline bool     speedBtns = true;
+    inline bool     hudStepShow = true;
+    inline bool     hudSpeedShow = true;
+    inline bool     backStepOn = true;
     inline bool     backAlways = false;
-    inline int      backDepth = 240;     // how many steps you can go back (30-600)
+    inline int      backDepth = 240;
 
-    // back step re-simulation state
     inline bool     resimming = false;
     inline int      resimLeft = 0;
     inline std::vector<int> resimHeld;
     inline std::deque<LoggedInput> inputLog;
-    inline bool     held[0x200] = {};    // buttons currently held (as seen by the game)
+    inline bool     held[0x200] = {};
 
-    // exact-frame desync verification
     inline bool     verifyOn = true;
     inline double   verifyTolPos = 0.001;
     inline double   verifyTolVel = 0.001;
@@ -211,7 +203,6 @@ namespace cky {
     inline int64_t  firstDivFrame = -1;
     inline void verifyReset() { verifyChecks = 0; verifyMisses = 0; firstDivFrame = -1; }
 
-    // input fixes
     inline int      frameOffset = 0;
     inline bool     holdFix[0x200] = {};
     inline bool     holdFixPending = false;
@@ -223,8 +214,6 @@ namespace cky {
 
     inline float    hudScale = 1.f;
     inline float    iconScale = 1.f;
-    // In-level HUD panel opacity (0.1 - 1.0). ONLY the in-level HUD uses it: the Cocos panel and the ImGui menu
-    // are always fully opaque (1.0) in every theme.
     inline float    hudOpacity = 0.75f;
 
     inline bool     audioSpeed = true;
@@ -278,7 +267,6 @@ namespace cky {
                         : 100.0;
     }
 
-    // ---- practice-mode checkpoint tracking (keeps inputs across deaths) ----
     struct Cp { uint32_t step; double clock; size_t macroSize; bool valid; };
     inline std::vector<Cp> ckpts;
     inline bool cpInit = false;
@@ -299,7 +287,6 @@ namespace cky {
         while (ckpts.size() > cnt) ckpts.pop_back();
     }
 
-    // recording: cut the macro back to the checkpoint
     inline void rewindTo(Cp const& cp) {
         step = cp.step;
         frameClock = cp.clock;
@@ -320,8 +307,6 @@ namespace cky {
         }
     }
 
-    // playback: jump the clock and cursor back to a checkpoint; buttons that should be
-    // held at that moment get re-pressed on the next step
     inline void rewindPlaybackTo(Cp const& cp) {
         step = cp.step;
         frameClock = cp.clock;
@@ -336,7 +321,6 @@ namespace cky {
         while (fixCursor < fixes.size() && static_cast<double>(fixes[fixCursor].frame) < cp.clock) ++fixCursor;
     }
 
-    // wipes the whole recording buffer
     inline void clearMacro() {
         macro.clear();
         fixes.clear();
@@ -363,7 +347,6 @@ namespace cky {
         return 240.f;
     }
 
-    // ---- saved positions ----
     inline CCPoint savedPos(std::string const& key, CCPoint def) {
         float x = Mod::get()->getSavedValue<float>(key + "-x", -99999.f);
         float y = Mod::get()->getSavedValue<float>(key + "-y", -99999.f);
@@ -376,7 +359,6 @@ namespace cky {
         Mod::get()->setSavedValue<float>(key + "-y", p.y);
     }
 
-    // ---- file helpers ----
     template <class T, class S>
     inline void wr(S& f, T v) {
         f.write(reinterpret_cast<char const*>(&v), sizeof(T));
@@ -410,27 +392,19 @@ namespace cky {
         return out;
     }
 
-    // <launcher>/game/macros  (falls back to the mod save folder if it can't be created)
     inline std::filesystem::path macroDir() {
         std::error_code ec;
-        auto dir = geode::dirs::getGameDir() / "macros";
+        auto dir = stdPath(geode::dirs::getGameDir()) / "macros";
         std::filesystem::create_directories(dir, ec);
         if (std::filesystem::is_directory(dir, ec)) return dir;
-        return Mod::get()->getSaveDir();
+        return stdPath(Mod::get()->getSaveDir());
     }
 
-    // Saved macros live in the mod's CONFIG folder (Android: com.geode.launcher/.../game/geode/config/chxrcky.cky):
-    //   chxrcky.cky / Theme macros / <Theme name> / <level>_<id>_slot<N><ext>
-    // e.g. Theme macros/Cat/Stereo_Madness_1_slot1.meow, Theme macros/Vintage/...slot1.vinyl,
-    // Theme macros/Molten rocks/...slot1.lava. Inside is the same CKY format whatever the extension.
-    // Old ".cky" macros in <game>/macros still load.
     inline std::filesystem::path themeMacroDir(int t) {
         auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
-        return Mod::get()->getConfigDir() / "Theme macros" / d.name;
+        return stdPath(Mod::get()->getConfigDir()) / "Theme macros" / d.name;
     }
 
-    // creates "Theme macros" and one folder per theme (when the mod loads and when the menu opens,
-    // so they are there to browse). Cheap: does nothing after the first successful run.
     inline void makeMacroFolders() {
         static bool done = false;
         if (done) return;
@@ -441,27 +415,21 @@ namespace cky {
             if (ec) ok = false;
         }
         done = ok;
-        // shows up in game/geode/logs so you can see where the folders went (or why they weren't made)
         if (ok) log::info("[cky] macro folders ready: {}", (themeMacroDir(0).parent_path()).string());
         else    log::error("[cky] could not create macro folders under {}: {}", (themeMacroDir(0).parent_path()).string(), ec.message());
     }
 
-    // the file this level + slot has under theme t
     inline std::filesystem::path slotFile(int t) {
         auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
         return themeMacroDir(t) / fmt::format("{}_{}_slot{}{}", levelNameSafe(), levelId(), slot, d.ext);
     }
 
-    // where a new macro is written: the current theme's folder + extension
     inline std::filesystem::path slotPath() {
         std::error_code ec;
         std::filesystem::create_directories(themeMacroDir(theme), ec);
         return slotFile(theme);
     }
 
-    // the macro to read: the most recently saved file among every theme's folder
-    // (current theme first, so it wins a tie) and the legacy <game>/macros/*.cky.
-    // Empty path if there is none.
     inline std::filesystem::path slotFind() {
         std::filesystem::path best;
         std::filesystem::file_time_type bestTime{};
@@ -507,7 +475,6 @@ namespace cky {
         if (!f.good()) return false;
         std::string raw = std::move(f).str();
 
-        // write to a temp file first so a crash never leaves a half-written macro
         auto path = slotPath();
         auto tmp = path; tmp += ".tmp";
         {
@@ -530,7 +497,7 @@ namespace cky {
         }
         std::error_code ec;
         std::filesystem::rename(tmp, path, ec);
-        if (ec) { // some Android filesystems refuse to replace: remove then rename
+        if (ec) {
             std::filesystem::remove(path, ec);
             std::filesystem::rename(tmp, path, ec);
         }
@@ -544,11 +511,10 @@ namespace cky {
             auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
             if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
         }
-        // slot 1 also picks up macros saved by older versions
         if (!std::filesystem::exists(p, ec) && slot == 1) {
-            auto old = Mod::get()->getSaveDir() / fmt::format("macro_{}.cky", levelId());
+            auto old = stdPath(Mod::get()->getSaveDir()) / fmt::format("macro_{}.cky", levelId());
             if (std::filesystem::exists(old, ec)) p = old;
-            else p = Mod::get()->getSaveDir() / "macro.cky";
+            else p = stdPath(Mod::get()->getSaveDir()) / "macro.cky";
         }
 
         std::string bytes;
@@ -564,7 +530,7 @@ namespace cky {
             std::memcpy(&m0, bytes.data(), 4);
             if (m0 == MAGICZ) {
                 std::memcpy(&rawSize, bytes.data() + 4, 4);
-                if (rawSize == 0 || rawSize > 1024u * 1024u * 1024u) return false; // 1 GB sanity cap
+                if (rawSize == 0 || rawSize > 1024u * 1024u * 1024u) return false;
                 std::string raw(rawSize, '\0');
                 size_t n = ZSTD_decompress(raw.data(), raw.size(), bytes.data() + 8, bytes.size() - 8);
                 if (ZSTD_isError(n) || n != rawSize) {
@@ -609,7 +575,6 @@ namespace cky {
                 FrameFix x{};
                 if (!rd(f, x.frame) || !rd(f, x.x1) || !rd(f, x.y1) || !rd(f, x.r1)
                     || !rd(f, x.x2) || !rd(f, x.y2) || !rd(f, x.r2)) return false;
-                // CKY3 files have no velocity: yv stays 0 and is skipped on playback
                 if ((magic == MAGIC4 || magic == MAGIC5) && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
                 x.hasVel = (magic == MAGIC4 || magic == MAGIC5);
                 if (magic == MAGIC5) {
@@ -633,13 +598,11 @@ namespace cky {
     }
 }
 
-// ---------- label switches (Labels tab) ----------
 namespace cky {
-    // CPS = clickHudOn, noclip accuracy / deaths = ncShowAcc / ncShowDeaths (declared above)
     inline bool lblFps  = false;
-    inline bool lblRun  = false;   // "12-56": where the attempt started and where it is / ended
-    inline bool lblTime = false;   // level time
-    inline bool lblBest = false;   // best run of this session in this level
+    inline bool lblRun  = false;
+    inline bool lblTime = false;
+    inline bool lblBest = false;
 
     inline void labelsSave() {
         auto m = Mod::get();
@@ -664,7 +627,6 @@ namespace cky {
     }
 }
 
-// ---------- shared helpers ----------
 inline void ckyNotify(char const* text, bool ok = true) {
     Notification::create(text,
         ok ? NotificationIcon::Success : NotificationIcon::Error)->show();
@@ -709,4 +671,3 @@ inline void ckyApplyFps() {
     CCApplication::sharedApplication()->setAnimationInterval(iv);
 }
 
-// END OF FILE (state.hpp)
