@@ -48,6 +48,8 @@ jobs:
           target: ${{ matrix.config.target }}
           combine: true
           use-cpm-cache: false
+          sdk: v6.0.0-alpha.1
+          cli: latest
 
       # Attempt 2: only if attempt 1 failed (transient network errors)
       - name: Build Mod (retry)
@@ -57,6 +59,8 @@ jobs:
           target: ${{ matrix.config.target }}
           combine: true
           use-cpm-cache: false
+          sdk: v6.0.0-alpha.1
+          cli: latest
 
   package:
     name: Package builds
