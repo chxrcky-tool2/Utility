@@ -1,4 +1,3 @@
-// startpos.cpp — StartPos switcher (bottom-left, behind the checkpoint buttons)
 #include "state.hpp"
 #include <algorithm>
 #include <vector>
@@ -9,7 +8,7 @@ static constexpr float SP_Y = 32.f;
 class CkySpSwitcher : public CCNode {
     std::vector<Ref<StartPosObject>> m_pos;
     CCLabelBMFont* m_label = nullptr;
-    int m_idx = -1; // -1 = level start
+    int m_idx = -1;
 
 public:
     static CkySpSwitcher* create(std::vector<StartPosObject*> const& v) {
@@ -62,7 +61,17 @@ public:
             return;
         }
         m_idx = idx;
-        pl->setStartPosObject(idx < 0 ? nullptr : m_pos[idx].data());
+        StartPosObject* sp = idx < 0 ? nullptr : m_pos[idx].data();
+        // GD 2.2091 has no PlayLayer::setStartPosObject; the generic lambda lets this compile
+        // against either SDK (old setter if it exists, else member + loadStartPosObject).
+        [&](auto* layer) {
+            if constexpr (requires { layer->setStartPosObject(sp); }) {
+                layer->setStartPosObject(sp);
+            } else {
+                if constexpr (requires { layer->m_startPosObject = sp; }) layer->m_startPosObject = sp;
+                if (sp) layer->loadStartPosObject(sp);
+            }
+        }(pl);
         pl->resetLevelFromStart();
         refresh();
     }
@@ -84,7 +93,6 @@ void ckySetStartPosVisible(bool on) {
     if (auto n = pl->m_uiLayer->getChildByID("cky-startpos")) n->setVisible(on);
 }
 
-// called from main.cpp (no separate hook, so nothing fights over setupHasCompleted)
 void ckyBuildStartPos(PlayLayer* pl) {
     if (!pl || !pl->m_uiLayer || !pl->m_objects) return;
     if (pl->m_uiLayer->getChildByID("cky-startpos")) return;
@@ -107,4 +115,3 @@ void ckyBuildStartPos(PlayLayer* pl) {
     pl->m_uiLayer->addChild(node, 1);
 }
 
-// END OF FILE (startpos.cpp)
