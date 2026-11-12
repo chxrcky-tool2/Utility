@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChxrCky</title>
+    <style>
+        :root {
+            --bg-color: #050a14;
+            --grid-color: rgba(0, 255, 255, 0.15);
+            --cyan: #00ffff;
+            --cyan-glow: rgba(0, 255, 255, 0.8);
+            --dark-cyan: #006666;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: #ffffff;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .scanner {
+            position: fixed;
+            top: -10px;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: var(--cyan);
+            opacity: 1.0;
+            box-shadow: 0 0 15px 5px var(--cyan);
+            animation: scan 4s linear infinite;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        @keyframes scan {
+            0% { top: -10px; }
+            100% { top: 100vh; }
+        }
+
+        .panel {
+            background: rgba(5, 10, 20, 0.95);
+            border: 2px solid var(--cyan);
+            box-shadow: 0 0 15px var(--cyan-glow), inset 0 0 15px var(--cyan-glow);
+            padding: 40px;
+            text-align: center;
+            position: relative;
+            z-index: 20;
+            clip-path: polygon(5% 0, 100% 0, 100% 95%, 95% 100%, 0 100%, 0 5%);
+            max-width: 800px;
+            width: 100%;
+            margin-top: 50px;
+            margin-bottom: 50px;
+        }
+
+        h1 {
+            color: var(--cyan);
+            font-size: 4rem;
+            margin: 0 0 10px 0;
+            text-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan);
+            letter-spacing: 5px;
+            display: inline-block;
+        }
+
+        p.subtitle {
+            color: #88ffff;
+            margin-bottom: 30px;
+            font-size: 1.1rem;
+            display: inline-block;
+        }
+
+        .btn {
+            display: inline-block;
+            background: transparent;
+            color: var(--cyan);
+            border: 1px solid var(--cyan);
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-decoration: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s ease;
+            font-family: inherit;
+            margin-bottom: 40px;
+        }
+
+        .btn:hover {
+            background: var(--cyan);
+            color: var(--bg-color);
+            box-shadow: 0 0 20px var(--cyan), 0 0 40px var(--cyan);
+        }
+
+        .features-container {
+            text-align: left;
+            border-top: 1px solid var(--dark-cyan);
+            padding-top: 20px;
+        }
+
+        h2 {
+            color: var(--cyan);
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 20px;
+            display: inline-block;
+            width: 100%;
+        }
+
+        h3 {
+            color: #88ffff;
+            font-size: 1.3rem;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed var(--dark-cyan);
+            padding-bottom: 5px;
+            display: inline-block;
+            width: 100%;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+            margin-top: 0;
+        }
+
+        li {
+            color: #88ffff;
+            font-size: 1rem;
+            position: relative;
+            padding-left: 25px;
+            margin-bottom: 8px;
+            display: inline-block;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        li::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: var(--cyan);
+            font-weight: bold;
+        }
+
+        .flicker {
+            animation: flicker 3s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+                text-shadow: 0 0 10px var(--cyan), 0 0 20px var(--cyan);
+            }
+            20%, 24%, 55% {
+                text-shadow: none;
+            }
+        }
+
+        .laser-highlight {
+            background-color: rgba(0, 255, 255, 0.2);
+            text-shadow: 0 0 15px var(--cyan), 0 0 30px var(--cyan);
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="scanner" id="laser"></div>
+
+    <div class="panel">
+        <h1 class="flicker">ChxrCky</h1>
+        <p class="subtitle">A Geode Macro Bot for Geometry Dash 2.2091</p>
+        
+        <a href="https://github.com/chxrcky-tool2/Utility/releases/download/1.0.6-Beta.1/chxrcky.cky.geode" class="btn">Download</a>
+
+        <div class="features-container">
+            <h2>Features</h2>
+            
+            <h3>Bot Tab</h3>
+            <ul>
+                <li>Record</li>
+                <li>Playback</li>
+                <li>Frame Stepper</li>
+                <li>Frame Fixes</li>
+                <li>Practice Fixes</li>
+                <li>Fix Interval (Steps)</li>
+                <li>Fix Velocity</li>
+                <li>Macro Slot Slider</li>
+                <li>Save, Load, Clear Macro</li>
+                <li>Import GDR File</li>
+            </ul>
+
+            <h3>Global Tab</h3>
+            <ul>
+                <li>TPS Bypass</li>
+                <li>Headless Physics (above 240 TPS)</li>
+                <li>Physics ms per frame</li>
+                <li>Step size</li>
+                <li>High TPS Toggle</li>
+                <li>Speedhack (0.01x to 4x)</li>
+                <li>Slower / Faster Buttons</li>
+                <li>Audio Follows Speed</li>
+            </ul>
+
+            <h3>Player Tab</h3>
+            <ul>
+                <li>Noclip</li>
+                <li>Safe Mode</li>
+                <li>Frame Window Calculator</li>
+                <li>Frame Window Settings</li>
+            </ul>
+
+            <h3>Display Tab</h3>
+            <ul>
+                <li>Hitboxes</li>
+                <li>Hitbox Trail</li>
+                <li>Hitbox Trail Settings</li>
+                <li>HUD</li>
+                <li>HUD Size</li>
+                <li>HUD Opacity</li>
+                <li>HUD Settings</li>
+                <li>StartPos Switcher</li>
+                <li>Input Overlay</li>
+                <li>Show Trajectory</li>
+                <li>Trajectory Length</li>
+            </ul>
+
+            <h3>Labels Tab</h3>
+            <ul>
+                <li>CPS</li>
+                <li>FPS</li>
+                <li>Noclip Accuracy</li>
+                <li>Noclip Deaths</li>
+                <li>Startpos Run</li>
+                <li>Level Time</li>
+                <li>Best Run</li>
+            </ul>
+
+            <h3>Clicks Tab</h3>
+            <ul>
+                <li>Clickbot Sounds</li>
+                <li>Click Pack Selector</li>
+                <li>Volume Slider (Up to 200%)</li>
+            </ul>
+
+            <h3>Rendering (Beta) Tab</h3>
+            <ul>
+                <li>Codec (H.264 / HEVC)</li>
+                <li>File Name</li>
+                <li>Resolution (up to 1080p)</li>
+                <li>FPS (up to 30)</li>
+                <li>Bitrate (Mbps)</li>
+                <li>Start Render (arm)</li>
+            </ul>
+
+            <h3>Settings Tab</h3>
+            <ul>
+                <li>Cky Icon Size</li>
+                <li>Reset Icon Position</li>
+                <li>Checkpoint Telemetry</li>
+                <li>Theme Selector (20 Themes)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const laser = document.getElementById('laser');
+        const textElements = document.querySelectorAll('h1, h2, h3, p, li');
+
+        function animate() {
+            const laserRect = laser.getBoundingClientRect();
+            const laserY = laserRect.top;
+
+            textElements.forEach(el => {
+                const rect = el.getBoundingClientRect();
+                if (laserY >= rect.top && laserY <= rect.bottom) {
+                    el.classList.add('laser-highlight');
+                } else {
+                    el.classList.remove('laser-highlight');
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        requestAnimationFrame(animate);
+    </script>
+</body>
+  </html>
