@@ -60,6 +60,7 @@ void ckyBuildHud(PlayLayer* pl);
 void ckyApplyHudScale();
 void ckyAddIcon(CCNode* host);
 void ckyOpenPanel(CCNode* host);
+void ckyToggleCocosPanel(CCNode* host);
 void ckySetStartPosVisible(bool on);
 void ckyBuildStartPos(PlayLayer* pl);
 void ckyBuildOverlay(PlayLayer* pl);

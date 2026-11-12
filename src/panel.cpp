@@ -1611,3 +1611,16 @@ void ckyOpenPanel(CCNode* host) {
     p->attachTo(host);
 }
 
+// Cocos-only toggle used by the pause menu button. Never touches ImGui (ckyOpenPanel keeps routing the round icon).
+// Open -> closes it through the panel's own onClose (restores the menus it hid). Closed -> opens it like the icon does.
+void ckyToggleCocosPanel(CCNode* host) {
+    if (!host) return;
+    if (auto existing = host->getChildByID("cky-panel")) {
+        static_cast<CkyPanel*>(existing)->onClose(nullptr);
+        return;
+    }
+    auto p = CkyPanel::create();
+    if (!p) return;
+    p->attachTo(host);
+}
+

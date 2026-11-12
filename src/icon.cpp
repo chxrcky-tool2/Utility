@@ -255,9 +255,41 @@ class $modify(CkyMenuLayer, MenuLayer) {
 };
 
 class $modify(CkyPauseLayer, PauseLayer) {
+    // Only toggles the Cocos panel. ImGui and the settings menu are untouched.
+    void onCkyPanelButton(CCObject*) {
+        if (ckyUiIsImGui()) return;
+        ckyToggleCocosPanel(this);
+    }
+
     void customSetup() {
-        PauseLayer::customSetup();
+        PauseLayer::customSetup();      // original first, same order as xdBot
         ckyAddIcon(this);
+
+        // Cocos button only; in ImGui mode the round icon already drives ImGui.
+        if (ckyUiIsImGui()) return;
+        if (this->getChildByIDRecursive("cky-pause-button")) return;   // never add twice
+
+        auto logo = ckyMakeLogo(32.f);
+        auto btn = CCMenuItemSpriteExtra::create(logo, this, menu_selector(CkyPauseLayer::onCkyPanelButton));
+        if (!btn) return;
+        btn->setID("cky-pause-button");
+
+        // Same approach as xdBot: with node-ids, join the stock right-hand menu and let its layout stack the
+        // button under Settings. getChildByID can return null, so it is checked (xdBot dereferences it blindly).
+        if (auto rightMenu = this->getChildByID("right-button-menu")) {
+            rightMenu->addChild(btn);
+            rightMenu->updateLayout();
+            return;
+        }
+
+        // Fallback without node-ids: our own menu at the fixed offset xdBot uses (relative to screen centre).
+        auto menu = CCMenu::create();
+        menu->setID("cky-pause-menu");
+        auto win = CCDirector::get()->getWinSize();
+        menu->setPosition({ win.width / 2.f, win.height / 2.f });
+        btn->setPosition({ 214.f, 88.f });
+        menu->addChild(btn);
+        this->addChild(menu);
     }
 };
 
