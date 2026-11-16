@@ -2,6 +2,7 @@
 #include "fx.hpp"
 #include "render/ChxrRender.hpp"
 #include <Geode/utils/web.hpp>
+#include <Geode/ui/TextInput.hpp>
 
 namespace {
     struct Theme {
@@ -74,6 +75,8 @@ namespace {
     };
 
     enum : int { T_DELTALOCK = 330, B_DL_DN, B_DL_UP, L_DL = 335, L_REALTPS };
+
+    enum : int { I_MACRO_NAME = 340 };
 
     enum : int { LBL_TAGS = 1000 };
 
@@ -814,6 +817,27 @@ public:
         nextRow();
     }
 
+    void rowInput(int tag) {
+        auto in = TextInput::create(280.f, "Macro name", "bigFont.fnt");
+        in->setID("cky-macro-name");
+        in->setTag(tag);
+        in->setScale(0.7f);
+        in->setPosition({63.f, m_y});
+        in->setFilter("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_ ");
+        in->setMaxCharCount(cky::MACRO_NAME_MAX);
+        in->setString(cky::macroName, false);
+        in->setCallback([](std::string const& v) { cky::setMacroName(v); });
+        m_rows->addChild(in);
+        nextRow();
+    }
+
+    void syncMacroName() {
+        if (!m_rows) return;
+        if (auto in = typeinfo_cast<TextInput*>(m_rows->getChildByTag(I_MACRO_NAME))) {
+            cky::setMacroName(in->getString());
+        }
+    }
+
     void rowInfo(int tag) {
         auto l = CCLabelBMFont::create("", "bigFont.fnt");
         l->setScale(0.35f);
@@ -1043,8 +1067,8 @@ public:
             rowPill("Practice fixes", T_PFIX);
             rowValue("Fix interval", B_FI_DN, B_FI_UP, L_FI);
             rowWide("Toggle fix velocity", B_FVEL);
-            rowValue("Macro slot", B_SLOT_DN, B_SLOT_UP, L_SLOT);
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
+            rowInput(I_MACRO_NAME);
             rowWide("Clear macro", B_CLEAR);
             rowWide("Import GDR file", B_IMPORT);
             rowValue("Input offset", B_OFF_DN, B_OFF_UP, L_OFF);
@@ -1142,7 +1166,7 @@ public:
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
             rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
-            rowText("ChxrCky Macro Bot v1.0.6");
+            rowText("ChxrCky Macro Bot v1.0.6-beta.2");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
@@ -1226,12 +1250,16 @@ public:
         setText(L_HUDSZ, fmt::format("{:.1f}x", cky::hudScale));
         setText(L_HUDOP, fmt::format("{}%", static_cast<int>(std::lround(cky::hudOpacity * 100.f))));
         setText(L_ICONSZ, fmt::format("{:.1f}x", cky::iconScale));
-        setText(L_SLOT, fmt::format("{}", cky::slot));
         setText(L_VOL, fmt::format("{}%", cky::clickVol));
         setText(L_INFO, fmt::format("Inputs: {}", cky::macro.size()));
         setText(L_INFO2, fmt::format("Macro TPS: {}", static_cast<int>(cky::macroTps)));
-        setText(L_INFO3, fmt::format("Slot {}: {}", cky::slot,
-            cky::slotExists() ? "saved" : "empty"));
+        if (cky::macroNameOk()) {
+            std::string n = cky::macroFileName();
+            if (n.size() > 24) n = n.substr(0, 23) + "~";
+            setText(L_INFO3, fmt::format("{}: {}", n, cky::slotExists() ? "saved" : "empty"));
+        } else {
+            setText(L_INFO3, "Type a macro name to save or load");
+        }
         setText(L_OFF, fmt::format("{:+d}", cky::frameOffset));
         setText(L_FI, fmt::format("{}", cky::fixInterval));
         cky::makeMacroFolders();
@@ -1483,22 +1511,22 @@ public:
             buildTab(3);
             return;
         case B_SAVE: {
+            syncMacroName();
+            if (!cky::macroNameOk()) { ckyNotify("Type a macro name first", false); break; }
             bool ok = cky::save();
-            ckyNotify(ok ? fmt::format("Saved to slot {}", cky::slot).c_str() : "Save failed", ok);
+            ckyNotify(ok ? fmt::format("Saved {}", cky::macroFileName()).c_str() : "Save failed", ok);
             break;
         }
         case B_LOAD: {
+            syncMacroName();
+            if (!cky::macroNameOk()) { ckyNotify("Type a macro name first", false); break; }
             bool ok = cky::load();
-            ckyNotify(ok ? fmt::format("Loaded slot {}", cky::slot).c_str() : "Load failed", ok);
+            ckyNotify(ok ? fmt::format("Loaded {}", cky::macroFileName()).c_str() : "Load failed", ok);
             break;
         }
         case B_CLEAR:
             cky::clearMacro();
             ckyNotify("Macro buffer cleared");
-            break;
-        case B_SLOT_DN:
-        case B_SLOT_UP:
-            cky::slot = std::clamp(cky::slot + (t == B_SLOT_UP ? 1 : -1), 1, cky::MAX_SLOTS);
             break;
         case B_TPS_DN:
         case B_TPS_UP:

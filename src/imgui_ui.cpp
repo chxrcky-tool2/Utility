@@ -805,17 +805,40 @@ namespace {
         }
 
         ImGui::Separator();
-        ImGui::SliderInt("Macro slot", &cky::slot, 1, cky::MAX_SLOTS);
-
         if (fxButton("Save macro")) {
-            bool ok = cky::save();
-            ckyNotify(ok ? fmt::format("Saved to slot {}", cky::slot).c_str() : "Save failed", ok);
+            if (!cky::macroNameOk()) {
+                ckyNotify("Type a macro name first", false);
+            } else {
+                bool ok = cky::save();
+                ckyNotify(ok ? fmt::format("Saved {}", cky::macroFileName()).c_str() : "Save failed", ok);
+            }
         }
         ImGui::SameLine();
         if (fxButton("Load macro")) {
-            bool ok = cky::load();
-            ckyNotify(ok ? fmt::format("Loaded slot {}", cky::slot).c_str() : "Load failed", ok);
+            if (!cky::macroNameOk()) {
+                ckyNotify("Type a macro name first", false);
+            } else {
+                bool ok = cky::load();
+                ckyNotify(ok ? fmt::format("Loaded {}", cky::macroFileName()).c_str() : "Load failed", ok);
+            }
         }
+
+        {
+            static char macroBuf[cky::MACRO_NAME_MAX + 1] = {};
+            static std::string lastSeen;
+            if (lastSeen != cky::macroName) {
+                std::snprintf(macroBuf, sizeof macroBuf, "%s", cky::macroName.c_str());
+                lastSeen = cky::macroName;
+            }
+            auto filter = [](ImGuiInputTextCallbackData* d) -> int {
+                return (d->EventChar < 128 && cky::macroCharOk(static_cast<char>(d->EventChar))) ? 0 : 1;
+            };
+            if (ImGui::InputText("Macro name", macroBuf, sizeof macroBuf, ImGuiInputTextFlags_CallbackCharFilter, filter)) {
+                cky::setMacroName(macroBuf);
+                lastSeen = cky::macroName;
+            }
+        }
+
         if (fxButton("Clear macro")) {
             cky::clearMacro();
             ckyNotify("Macro buffer cleared");
@@ -828,7 +851,11 @@ namespace {
         ImGui::Separator();
         ImGui::Text("Inputs: %llu", static_cast<unsigned long long>(cky::macro.size()));
         ImGui::Text("Macro TPS: %d", static_cast<int>(cky::macroTps));
-        ImGui::Text("Slot %d: %s", cky::slot, cky::slotExists() ? "saved" : "empty");
+        if (cky::macroNameOk()) {
+            ImGui::Text("%s: %s", cky::macroFileName().c_str(), cky::slotExists() ? "saved" : "empty");
+        } else {
+            ImGui::TextUnformatted("Type a macro name to save or load");
+        }
     }
 
     void tabGlobal() {
@@ -1159,7 +1186,7 @@ namespace {
         }
 
         ImGui::Separator();
-        ImGui::Text("ChxrCky Macro Bot v1.0.5");
+        ImGui::Text("ChxrCky Macro Bot v1.0.6-beta.2");
         ImGui::TextDisabled("(c) 2026 ChxrCky - GNU GPL v3.0");
         ImGui::TextDisabled("Free software, NO WARRANTY.");
         if (fxButton("Open GPL-3.0 license")) {

@@ -128,6 +128,8 @@ namespace cky {
     inline bool     recArmed = false;
     inline bool     playArmed = false;
     inline int      slot = 1;
+    inline std::string macroName;
+    constexpr size_t MACRO_NAME_MAX = 48;
 
     inline std::vector<FrameFix> fixes;
     inline size_t   fixCursor = 0;
@@ -419,12 +421,49 @@ namespace cky {
         else    log::error("[cky] could not create macro folders under {}: {}", (themeMacroDir(0).parent_path()).string(), ec.message());
     }
 
+    inline bool macroCharOk(char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == ' ' || c == '_';
+    }
+
+    inline std::string filterMacroName(std::string const& in) {
+        std::string out;
+        for (char c : in) {
+            if (macroCharOk(c) && out.size() < MACRO_NAME_MAX) out += c;
+        }
+        return out;
+    }
+
+    inline std::string macroStem() {
+        std::string s = filterMacroName(macroName);
+        size_t b = s.find_first_not_of(' ');
+        if (b == std::string::npos) return {};
+        size_t e = s.find_last_not_of(' ');
+        return s.substr(b, e - b + 1);
+    }
+
+    inline bool macroNameOk() {
+        return !macroStem().empty();
+    }
+
+    inline void setMacroName(std::string const& v) {
+        macroName = filterMacroName(v);
+        Mod::get()->setSavedValue<std::string>("s-macro-name", macroName);
+    }
+
+    inline std::string macroExt(int t) {
+        return kThemeDefs[std::clamp(t, 0, ThemeCount - 1)].ext;
+    }
+
+    inline std::string macroFileName() {
+        return macroStem() + macroExt(theme);
+    }
+
     inline std::filesystem::path slotFile(int t) {
-        auto const& d = kThemeDefs[std::clamp(t, 0, ThemeCount - 1)];
-        return themeMacroDir(t) / fmt::format("{}_{}_slot{}{}", levelNameSafe(), levelId(), slot, d.ext);
+        return themeMacroDir(t) / (macroStem() + macroExt(t));
     }
 
     inline std::filesystem::path slotPath() {
+        if (!macroNameOk()) return {};
         std::error_code ec;
         std::filesystem::create_directories(themeMacroDir(theme), ec);
         return slotFile(theme);
@@ -432,6 +471,7 @@ namespace cky {
 
     inline std::filesystem::path slotFind() {
         std::filesystem::path best;
+        if (!macroNameOk()) return best;
         std::filesystem::file_time_type bestTime{};
         auto consider = [&](std::filesystem::path p) {
             std::error_code ec;
@@ -442,7 +482,7 @@ namespace cky {
         };
         consider(slotFile(theme));
         for (int i = 0; i < ThemeCount; ++i) consider(slotFile(i));
-        consider(macroDir() / fmt::format("{}_{}_slot{}.cky", levelNameSafe(), levelId(), slot));
+        for (int i = 0; i < ThemeCount; ++i) consider(macroDir() / (macroStem() + macroExt(i)));
         return best;
     }
 
@@ -476,6 +516,7 @@ namespace cky {
         std::string raw = std::move(f).str();
 
         auto path = slotPath();
+        if (path.empty()) return false;
         auto tmp = path; tmp += ".tmp";
         {
             std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
@@ -506,16 +547,7 @@ namespace cky {
 
     inline bool load() {
         auto p = slotFind();
-        std::error_code ec;
-        if (p.empty()) {
-            auto oldNamed = macroDir() / fmt::format("macro_{}_slot{}.cky", levelId(), slot);
-            if (std::filesystem::exists(oldNamed, ec)) p = oldNamed;
-        }
-        if (!std::filesystem::exists(p, ec) && slot == 1) {
-            auto old = stdPath(Mod::get()->getSaveDir()) / fmt::format("macro_{}.cky", levelId());
-            if (std::filesystem::exists(old, ec)) p = old;
-            else p = stdPath(Mod::get()->getSaveDir()) / "macro.cky";
-        }
+        if (p.empty()) return false;
 
         std::string bytes;
         {
@@ -732,6 +764,7 @@ namespace cky {
         for (auto const& s : intSettings()) {
             *s.ref = std::clamp(m->getSavedValue<int>(s.key, *s.ref), s.lo, s.hi);
         }
+        macroName = filterMacroName(m->getSavedValue<std::string>("s-macro-name", macroName));
         settingsLast = settingsValues();
     }
 }
