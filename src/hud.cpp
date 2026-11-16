@@ -586,6 +586,7 @@ public:
     void onClock(CCObject*) {
         cky::speedOn = !cky::speedOn;
         ckyApplyAudio();
+        cky::settingsSaveIfChanged();
         ckyHudRefresh();
     }
 
@@ -597,6 +598,7 @@ public:
         cky::speed = best;
         cky::speedOn = true;
         ckyApplyAudio();
+        cky::settingsSaveIfChanged();
         ckyHudRefresh();
     }
 
@@ -608,6 +610,7 @@ public:
         cky::speed = std::min(4.f, best);
         cky::speedOn = true;
         ckyApplyAudio();
+        cky::settingsSaveIfChanged();
         ckyHudRefresh();
     }
 };

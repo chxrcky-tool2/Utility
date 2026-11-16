@@ -152,9 +152,8 @@ namespace cky {
     inline float    fps = 120.f;
     inline double   origInterval = 0.0;
 
-    inline bool     headless = true;
-    inline float    headlessBudgetMs = 12.f;
-    inline float    stepCostMs = 0.02f;
+    inline bool     deltaLock = true;
+    inline float    deltaLockTps = 30.f;
 
     inline float    actualTps = 0.f;
     inline uint32_t measSteps = 0;
@@ -246,7 +245,7 @@ namespace cky {
 
     inline float effTps()   { return tpsOn ? tps : 240.f; }
     inline float effSpeed() { return (speedOn && speedBtns) ? speed : 1.f; }
-    inline bool  headlessActive() { return headless && effTps() > 240.f && !frozen; }
+    inline bool  deltaLockActive() { return deltaLock && effTps() > 240.f && !frozen; }
 
     inline double clockInc() {
         return static_cast<double>(macroTps) / static_cast<double>(effTps());
@@ -625,6 +624,115 @@ namespace cky {
         lblRun       = m->getSavedValue<bool>("lbl-run", lblRun);
         lblTime      = m->getSavedValue<bool>("lbl-time", lblTime);
         lblBest      = m->getSavedValue<bool>("lbl-best", lblBest);
+    }
+}
+
+template <class M>
+inline void ckyFlushMod(M* m) {
+    if constexpr (requires { m->saveData(); }) {
+        (void)m->saveData();
+    }
+}
+
+namespace cky {
+    struct BoolSetting  { char const* key; bool* ref; };
+    struct FloatSetting { char const* key; float* ref; float lo; float hi; };
+    struct IntSetting   { char const* key; int* ref; int lo; int hi; };
+
+    inline std::vector<BoolSetting> const& boolSettings() {
+        static std::vector<BoolSetting> const v = {
+            { "s-noclip", &noclip },
+            { "s-safe", &safeMode },
+            { "s-hitboxes", &hitboxes },
+            { "s-trail", &hitboxTrail },
+            { "s-pfix", &practiceFixes },
+            { "s-ffix", &frameFixes },
+            { "s-fixvel", &fixVelocity },
+            { "s-verify", &verifyOn },
+            { "s-startpos", &startPosOn },
+            { "s-overlay", &overlayOn },
+            { "s-clickbot", &clickbotOn },
+            { "s-telem", &ckptTelemetry },
+            { "s-traj", &trajectory },
+            { "s-tps-on", &tpsOn },
+            { "s-speed-on", &speedOn },
+            { "s-audio", &audioSpeed },
+            { "s-hud", &hudOn },
+            { "s-step-btns", &stepperBtns },
+            { "s-speed-btns", &speedBtns },
+            { "s-hud-step", &hudStepShow },
+            { "s-hud-speed", &hudSpeedShow },
+            { "s-backstep", &backStepOn },
+            { "s-back-always", &backAlways },
+            { "s-delta-lock", &deltaLock },
+            { "lbl-cps", &clickHudOn },
+            { "lbl-fps", &lblFps },
+            { "lbl-nc-acc", &ncShowAcc },
+            { "lbl-nc-deaths", &ncShowDeaths },
+            { "lbl-run", &lblRun },
+            { "lbl-time", &lblTime },
+            { "lbl-best", &lblBest },
+        };
+        return v;
+    }
+
+    inline std::vector<FloatSetting> const& floatSettings() {
+        static std::vector<FloatSetting> const v = {
+            { "s-tps", &tps, TPS_MIN, TPS_MAX },
+            { "s-speed", &speed, 0.01f, 4.f },
+            { "s-tps-step", &tpsStep, 1.f, 500.f },
+            { "s-hud-scale", &hudScale, 0.5f, 2.f },
+            { "s-icon-scale", &iconScale, 0.5f, 2.f },
+            { "s-delta-tps", &deltaLockTps, 20.f, 120.f },
+        };
+        return v;
+    }
+
+    inline std::vector<IntSetting> const& intSettings() {
+        static std::vector<IntSetting> const v = {
+            { "s-fix-interval", &fixInterval, 1, 240 },
+            { "s-back-depth", &backDepth, 30, 600 },
+            { "s-traj-len", &trajLen, 60, 480 },
+            { "s-frame-offset", &frameOffset, -10, 10 },
+            { "s-slot", &slot, 1, MAX_SLOTS },
+        };
+        return v;
+    }
+
+    inline std::vector<double> settingsLast;
+
+    inline std::vector<double> settingsValues() {
+        std::vector<double> v;
+        for (auto const& s : boolSettings()) v.push_back(*s.ref ? 1.0 : 0.0);
+        for (auto const& s : floatSettings()) v.push_back(static_cast<double>(*s.ref));
+        for (auto const& s : intSettings()) v.push_back(static_cast<double>(*s.ref));
+        return v;
+    }
+
+    inline void settingsSave() {
+        auto m = Mod::get();
+        for (auto const& s : boolSettings()) m->setSavedValue<bool>(s.key, *s.ref);
+        for (auto const& s : floatSettings()) m->setSavedValue<float>(s.key, *s.ref);
+        for (auto const& s : intSettings()) m->setSavedValue<int>(s.key, *s.ref);
+        settingsLast = settingsValues();
+        ckyFlushMod(m);
+    }
+
+    inline void settingsSaveIfChanged() {
+        if (settingsLast == settingsValues()) return;
+        settingsSave();
+    }
+
+    inline void settingsLoad() {
+        auto m = Mod::get();
+        for (auto const& s : boolSettings()) *s.ref = m->getSavedValue<bool>(s.key, *s.ref);
+        for (auto const& s : floatSettings()) {
+            *s.ref = std::clamp(m->getSavedValue<float>(s.key, *s.ref), s.lo, s.hi);
+        }
+        for (auto const& s : intSettings()) {
+            *s.ref = std::clamp(m->getSavedValue<int>(s.key, *s.ref), s.lo, s.hi);
+        }
+        settingsLast = settingsValues();
     }
 }
 

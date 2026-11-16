@@ -850,10 +850,10 @@ namespace {
             else { cky::tps = t2; cky::tpsOn = true; cky::resetMeasure(); }
         }
 
-        fxCheckbox("Headless physics (above 240 TPS)", &cky::headless);
-        if (cky::headless) {
+        fxCheckbox("Delta lock (above 240 TPS)", &cky::deltaLock);
+        if (cky::deltaLock) {
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.55f);
-            ImGui::SliderFloat("Physics ms per frame", &cky::headlessBudgetMs, 4.f, 30.f, "%.0f ms");
+            ImGui::SliderFloat("Delta lock TPS", &cky::deltaLockTps, 20.f, 120.f, "%.0f TPS");
         }
         if (cky::actualTps > 0.f) ImGui::Text("Real TPS: %d / %d", static_cast<int>(cky::actualTps + 0.5f), static_cast<int>(cky::effTps()));
 
@@ -1296,6 +1296,7 @@ namespace {
             fxEnd(fxPos, fxSize);
         }
         ImGui::End();
+        cky::settingsSaveIfChanged();
         ckyHudRefresh();
         if (!open) cky::imguiOpen = false;
     }

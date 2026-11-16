@@ -285,11 +285,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 float realDt = dt;
                 float sp = SPEED_IN_MAIN ? cky::effSpeed() : 1.f;
                 if (sp != 1.f) dt *= sp;
-                // headless physics: cap this frame's catch-up to what the device can run in the budget
-                if (cky::headlessActive() && !chxr::Renderer::get().rendering()) {
-                    double cost = std::max(0.002, static_cast<double>(cky::stepCostMs));
-                    double maxSteps = std::max(60.0, static_cast<double>(std::clamp(cky::headlessBudgetMs, 4.f, 30.f)) / cost);
-                    float maxDt = static_cast<float>(maxSteps / static_cast<double>(cky::effTps()));
+                if (cky::deltaLockActive() && !chxr::Renderer::get().rendering()) {
+                    float maxDt = 1.f / std::clamp(cky::deltaLockTps, 20.f, 120.f);
                     if (dt > maxDt) dt = maxDt;
                 }
                 // rendering: fixed timestep, one game update per video frame (TPS/fps physics steps)
@@ -306,14 +303,7 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
             HitboxScope hb;
             {
                 TpsScope tps(this);
-                auto t0 = std::chrono::steady_clock::now();
-                uint32_t s0 = cky::step;
                 GJBaseGameLayer::update(dt);
-                uint32_t ran = cky::step - s0;
-                if (cky::headlessActive() && ran >= 8) {
-                    float ms = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
-                    cky::stepCostMs = cky::stepCostMs * 0.9f + (ms / static_cast<float>(ran)) * 0.1f;
-                }
             }
             forceHitboxVisible();
 
@@ -340,7 +330,10 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
         }
         if (inLevel && (++cky::hudTick % 6) == 0) {
             ckyHudRefresh();
-            if ((cky::hudTick % 30) == 0) ckyApplyAudio();
+            if ((cky::hudTick % 30) == 0) {
+                ckyApplyAudio();
+                cky::settingsSaveIfChanged();
+            }
         }
     }
 
@@ -441,11 +434,8 @@ class $modify(CkyGameLayer, GJBaseGameLayer) {
                 }
             }
 
-            // display-only extras are skipped in headless mode above 480 TPS (nobody can see them anyway)
-            if (!(cky::headlessActive() && cky::effTps() > 480.f)) {
-                ckyFwCapture(this);    // frame window calculator: ring of the last few steps (only when enabled)
-                ckyTrailCapture(this); // hitbox trail: this step's hitboxes (after any frame fix)
-            }
+            ckyFwCapture(this);
+            ckyTrailCapture(this);
 
             if (cky::noclip) {
                 cky::ncFrames = cky::ncFrames + 1;
@@ -682,6 +672,7 @@ class $modify(CkyPlayLayer, PlayLayer) {
 // create macros/ and the per-theme macro folders in the mod save folder
 $on_mod(Loaded) {
     cky::makeMacroFolders();
+    cky::settingsLoad();
 }
 
 // END OF FILE (main.cpp)

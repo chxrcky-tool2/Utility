@@ -73,7 +73,7 @@ namespace {
         PAGE_RENDER = 9
     };
 
-    enum : int { T_HEADLESS = 330, B_HB_DN, B_HB_UP, L_HB = 335, L_REALTPS };
+    enum : int { T_DELTALOCK = 330, B_DL_DN, B_DL_UP, L_DL = 335, L_REALTPS };
 
     enum : int { LBL_TAGS = 1000 };
 
@@ -1057,8 +1057,8 @@ public:
             rowValue("TPS (1-6000)", B_TPS_DN, B_TPS_UP, L_TPS);
             rowValue("TPS step", B_TSTEP_DN, B_TSTEP_UP, L_TSTEP);
             rowWide("High TPS", B_HIGH);
-            rowPill("Headless physics", T_HEADLESS);
-            rowValue("Physics ms/frame", B_HB_DN, B_HB_UP, L_HB);
+            rowPill("Delta lock", T_DELTALOCK);
+            rowValue("Delta lock TPS", B_DL_DN, B_DL_UP, L_DL);
             rowInfo(L_REALTPS);
             rowPill("Speedhack", T_SPEED);
             rowValue("Speed", B_SPD_DN, B_SPD_UP, L_SPEED);
@@ -1189,8 +1189,8 @@ public:
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
         setPill(T_PFIX, cky::practiceFixes);
-        setPill(T_HEADLESS, cky::headless);
-        setText(L_HB, fmt::format("{:.0f}", cky::headlessBudgetMs));
+        setPill(T_DELTALOCK, cky::deltaLock);
+        setText(L_DL, fmt::format("{:.0f}", cky::deltaLockTps));
         setText(L_REALTPS, cky::actualTps > 0.f
             ? fmt::format("Real TPS: {} / {}", static_cast<int>(cky::actualTps + 0.5f), static_cast<int>(cky::effTps()))
             : std::string("Real TPS: (play a level)"));
@@ -1371,8 +1371,8 @@ public:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::frameFixes = !cky::frameFixes;
             break;
-        case T_HEADLESS:
-            cky::headless = !cky::headless;
+        case T_DELTALOCK:
+            cky::deltaLock = !cky::deltaLock;
             break;
         case T_PFIX:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
@@ -1419,6 +1419,7 @@ public:
         default: break;
         }
         cky::labelsSave();
+        cky::settingsSaveIfChanged();
         m_anim = true;
         refresh();
         m_anim = false;
@@ -1438,9 +1439,9 @@ public:
             return;
         }
         switch (t) {
-        case B_HB_DN:
-        case B_HB_UP:
-            cky::headlessBudgetMs = std::clamp(cky::headlessBudgetMs + (t == B_HB_UP ? 2.f : -2.f), 4.f, 30.f);
+        case B_DL_DN:
+        case B_DL_UP:
+            cky::deltaLockTps = std::clamp(cky::deltaLockTps + (t == B_DL_UP ? 5.f : -5.f), 20.f, 120.f);
             break;
         case B_RN_CODEC_DN:
         case B_RN_CODEC_UP: {
@@ -1598,6 +1599,7 @@ public:
             break;
         default: break;
         }
+        cky::settingsSaveIfChanged();
         refresh();
         ckyHudRefresh();
     }
