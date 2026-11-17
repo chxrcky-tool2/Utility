@@ -6,9 +6,6 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 project(ChxrCkyBot VERSION 1.0.6)
 
-# Optional third-party libraries (written for Geode 5, may not build on Geode 6 alpha yet).
-# If CI fails inside one of them, set that option to OFF. The source files compile to stubs
-# without the library: no GDR import / no ImGui menu, the Cocos menu stays.
 option(CKY_GDR   "Import .gdr replays (libGDR)"   ON)
 option(CKY_IMGUI "ImGui menu (gd-imgui-cocos)"    ON)
 
@@ -33,7 +30,6 @@ if (CKY_IMGUI)
     target_link_libraries(${PROJECT_NAME} imgui-cocos)
 endif()
 
-# Zstd (CKZ5 macro compression)
 CPMAddPackage(
     NAME zstd
     GITHUB_REPOSITORY facebook/zstd
@@ -44,7 +40,6 @@ CPMAddPackage(
 target_link_libraries(${PROJECT_NAME} libzstd_static)
 target_include_directories(${PROJECT_NAME} PRIVATE ${zstd_SOURCE_DIR}/lib)
 
-# Built-in renderer: Android hardware encoder + MP4 muxer from the NDK (no other mod needed)
 if (ANDROID)
     target_link_libraries(${PROJECT_NAME} mediandk)
 endif()
