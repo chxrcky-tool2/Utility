@@ -59,7 +59,7 @@ jobs:
           target: ${{ matrix.config.target }}
           combine: true
           use-cpm-cache: false
-          sdk: v6.0.0-alpha.1
+          sdk: v6.0.0-alpha.2
           cli: latest
 
   package:
