@@ -803,6 +803,19 @@ namespace {
             }
             fxCheckbox("Fix velocity", &cky::fixVelocity);
         }
+        {
+            bool sf = cky::sfOn;
+            if (fxCheckbox("Sub-frame snapshots", &sf)) {
+                cky::sfOn = sf;
+                if (!sf) ckySfClear(true);
+            }
+            fxCheckbox("Store snapshots in macros", &cky::sfRecord);
+            fxCheckbox("Apply snapshots on playback", &cky::sfApply);
+            int si = cky::sfInterval;
+            if (ImGui::SliderInt("Snapshot interval (steps)", &si, 1, 960)) cky::sfInterval = std::clamp(si, 1, 960);
+            int sd = cky::sfDepth;
+            if (ImGui::SliderInt("Snapshot depth (steps)", &sd, 30, 960)) cky::sfDepth = std::clamp(sd, 30, 960);
+        }
 
         ImGui::Separator();
         if (fxButton("Save macro")) {

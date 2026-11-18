@@ -1,5 +1,3 @@
-// import_gdr.cpp — imports the newest .gdr/.gdr2 replay from <game dir>/macros/import
-// Needs the GDReplayFormat library (see CMakeLists). Without it this file is a harmless stub.
 #include "state.hpp"
 
 #if __has_include(<gdr/gdr.hpp>)
@@ -10,7 +8,6 @@ namespace {
         CkyReplay() : Replay("ChxrCky", 1) {}
     };
 
-    // works with geode-style (isOk/unwrap) and std::expected-style (bool/*) results
     template <class R> auto resOk(R& r, int) -> decltype(static_cast<bool>(r.isOk())) { return r.isOk(); }
     template <class R> bool resOk(R& r, long) { return static_cast<bool>(r); }
     template <class R> auto resVal(R& r, int) -> decltype(r.unwrap()) { return r.unwrap(); }
@@ -63,7 +60,6 @@ bool ckyImportGdr() {
         m.playerButton = static_cast<int>(in.button) | (in.player2 ? cky::P2_FLAG : 0);
         tmp.push_back(m);
     }
-    // GDR stores all P1 inputs then all P2 inputs, so sort by frame
     std::stable_sort(tmp.begin(), tmp.end(), [](MacroInput const& a, MacroInput const& b) {
         return a.frame < b.frame;
     });
@@ -73,8 +69,10 @@ bool ckyImportGdr() {
     }
 
     cky::macro = std::move(tmp);
-    cky::fixes.clear(); // GDR files carry no frame fixes
+    cky::fixes.clear();
     cky::fixCursor = 0;
+    cky::sfBlobs.clear();
+    cky::sfCursor = 0;
     cky::cursor = 0;
     cky::macroTps = rep.framerate > 1.0 ? static_cast<float>(rep.framerate) : 240.f;
     cky::tps = cky::macroTps;
@@ -93,4 +91,3 @@ bool ckyImportGdr() {
 
 #endif
 
-// END OF FILE (import_gdr.cpp)
