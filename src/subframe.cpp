@@ -5,8 +5,6 @@
     X(m_lastPosition) \
     X(m_xVelocity)
 
-CKY_SF_EXTRA(CKY_DEF_OK)
-
 namespace {
     constexpr size_t SF_MAX = 4096;
     constexpr size_t SF_MAX_BYTES = 24u * 1024u * 1024u;
@@ -303,7 +301,7 @@ uint32_t ckySfLayoutHash() {
 }
 
 void ckySfCapture(GJBaseGameLayer* l, CkySfPhase ph) {
-    if (!cky::sfOn || !cky::backStepOn || !l) return;
+    if (!l) return;
     if (cky::resimming || cky::trajCreating || cky::effTps() > 480.f) return;
     PlayerObject* p1 = l->m_player1;
     if (!p1 || p1->m_isDead) return;

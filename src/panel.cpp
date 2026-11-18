@@ -42,7 +42,7 @@ namespace {
         T_REC = 1, T_PLAY, T_STEPPER, T_TPS, T_SPEED, T_AUDIO,
         T_NOCLIP, T_SAFE, T_NCACC, T_NCDEATH, T_HITBOX, T_HUD, T_STARTPOS, T_TELEM,
         T_OVERLAY, T_CLICKHUD, T_CLICKBOT, T_TRAJ, T_FFIX,
-        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS, T_TRAIL, T_PFIX, T_SUBFRAME,
+        T_HUDSTEP, T_HUDSPEED, T_BACKSTEP, T_BACKALWAYS, T_STEPBTNS, T_SPEEDBTNS, T_TRAIL, T_PFIX,
         B_SAVE = 30, B_LOAD, B_CLEAR, B_SLOT_DN, B_SLOT_UP, B_TPS_DN, B_TPS_UP, B_HIGH,
         B_TSTEP_DN, B_TSTEP_UP, B_SPD_DN, B_SPD_UP, B_HUDSZ_DN, B_HUDSZ_UP,
         B_ICONSZ_DN, B_ICONSZ_UP, B_RESETPOS, B_LICENSE, B_PACK_DN, B_PACK_UP, B_IMPORT,
@@ -1065,7 +1065,6 @@ public:
             rowPill("Frame stepper", T_STEPPER);
             rowPill("Frame fixes", T_FFIX);
             rowPill("Practice fixes", T_PFIX);
-            rowPill("Sub-frame snapshots", T_SUBFRAME);
             rowValue("Fix interval", B_FI_DN, B_FI_UP, L_FI);
             rowWide("Toggle fix velocity", B_FVEL);
             rowTwo("Save macro", B_SAVE, "Load macro", B_LOAD);
@@ -1214,7 +1213,6 @@ public:
         setPill(T_TRAJ, cky::trajectory);
         setPill(T_FFIX, cky::frameFixes);
         setPill(T_PFIX, cky::practiceFixes);
-        setPill(T_SUBFRAME, cky::sfOn);
         setPill(T_DELTALOCK, cky::deltaLock);
         setText(L_DL, fmt::format("{:.0f}", cky::deltaLockTps));
         setText(L_REALTPS, cky::actualTps > 0.f
@@ -1407,10 +1405,6 @@ public:
         case T_PFIX:
             if (cky::recording) { ckyNotify("Stop recording first", false); break; }
             cky::practiceFixes = !cky::practiceFixes;
-            break;
-        case T_SUBFRAME:
-            cky::sfOn = !cky::sfOn;
-            if (!cky::sfOn) ckySfClear(true);
             break;
         case T_HUDSTEP:
             cky::hudStepShow = !cky::hudStepShow;
@@ -1629,7 +1623,7 @@ public:
             buildTab(3);
             return;
         case B_LICENSE:
-            web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
+            web::openLinkInBrowser("https:\057\057www.gnu.org/licenses/gpl-3.0.html");
             break;
         default: break;
         }

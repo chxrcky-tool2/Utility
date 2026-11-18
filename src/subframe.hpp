@@ -17,9 +17,9 @@ struct CkySfBlob {
 };
 
 namespace cky {
-    inline bool sfOn = true;
-    inline bool sfRecord = true;
-    inline bool sfApply = true;
+    inline constexpr bool sfOn = true;
+    inline constexpr bool sfRecord = true;
+    inline constexpr bool sfApply = true;
     inline int sfDepth = 240;
     inline int sfInterval = 120;
     inline std::vector<CkySfBlob> sfBlobs;
