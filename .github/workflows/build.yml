@@ -52,15 +52,15 @@ jobs:
           cli: latest
 
       # Attempt 2: only if attempt 1 failed (transient network errors)
-      - name: Build Mod (retry)
-        if: steps.build1.outcome == 'failure'
-        uses: geode-sdk/build-geode-mod@main
-        with:
-          target: ${{ matrix.config.target }}
-          combine: true
-          use-cpm-cache: false
-          sdk: v6.0.0-alpha.2
-          cli: latest
+    #  - name: Build Mod (retry)
+    #    if: steps.build1.outcome == 'failure'
+    #    uses: geode-sdk/build-geode-mod@main
+    #    with:
+   #       target: ${{ matrix.config.target }}
+    #      combine: true
+      #    use-cpm-cache: false
+      #    sdk: v6.0.0-alpha.2
+      #    cli: latest
 
   package:
     name: Package builds
