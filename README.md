@@ -43,3 +43,5 @@ Android32 & Android64.
 Join our Discord server to report bugs, suggest features, or just chat with other users!
 👉 **[Click here to join the ChxrCky Discord](https://discord.gg/Bm8pYsmpDR)**
 that's all
+
+Free hosted website 👉 **[Here](https://chxrcky-tool2.github.io/)**
