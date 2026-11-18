@@ -28,12 +28,20 @@ struct CkyPlayerState {
     bool valid = false;
 };
 
-// member is usable: exists, plain data, default constructible and assignable (bit-fields included)
-#define CKY_PS_OK(f) requires (std::remove_pointer_t<decltype(d)>* ckyp) { \
-    ckyp->f; \
-    requires std::is_trivially_copyable_v<std::remove_cvref_t<decltype(ckyp->f)>>; \
-    requires std::is_default_constructible_v<std::remove_cvref_t<decltype(ckyp->f)>>; \
-    ckyp->f = ckyp->f; }
+// member is usable: exists, plain data, default constructible and assignable (bit-fields included).
+// Done with one named concept per member (instead of a requires-expression inside the generic lambdas)
+// because Clang from the Android NDK can't evaluate that inside lambdas in template functions.
+#define CKY_DEF_OK(f) \
+    template <class D> \
+    concept CkyOk_##f = requires(D* p) { \
+        p->f; \
+        requires std::is_trivially_copyable_v<std::remove_cvref_t<decltype(p->f)>>; \
+        requires std::is_default_constructible_v<std::remove_cvref_t<decltype(p->f)>>; \
+        p->f = p->f; \
+    };
+CKY_TRAJ_FIELDS(CKY_DEF_OK)
+CKY_REAL_FIELDS(CKY_DEF_OK)
+#define CKY_PS_OK(f) CkyOk_##f<std::remove_pointer_t<decltype(d)>>
 
 namespace cky {
     template <class T>
