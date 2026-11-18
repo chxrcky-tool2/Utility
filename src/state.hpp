@@ -29,6 +29,7 @@ using namespace geode::prelude;
 
 #include "player_state.hpp"
 #include "fixstate.hpp"
+#include "subframe.hpp"
 #include "themes.hpp"
 #include "framewindow.hpp"
 
@@ -110,6 +111,7 @@ namespace cky {
     constexpr uint32_t MAGIC3 = 0x33594B43;
     constexpr uint32_t MAGIC4 = 0x34594B43;
     constexpr uint32_t MAGIC5 = 0x35594B43;
+    constexpr uint32_t MAGIC6 = 0x36594B43;
     constexpr uint32_t MAGICZ = 0x355A4B43;
     constexpr int ZSTD_LEVEL = 3;
     inline bool compressSaves = true;
@@ -297,6 +299,8 @@ namespace cky {
             uint32_t cf = static_cast<uint32_t>(cp.clock + 0.5);
             while (!fixes.empty() && fixes.back().frame >= cf) fixes.pop_back();
             fixCursor = 0;
+            while (!sfBlobs.empty() && sfBlobs.back().frame >= cf) sfBlobs.pop_back();
+            sfCursor = 0;
         }
         if (macro.size() > cp.macroSize) {
             macro.erase(macro.begin() + cp.macroSize, macro.end());
@@ -321,12 +325,16 @@ namespace cky {
         holdFixPending = true;
         fixCursor = 0;
         while (fixCursor < fixes.size() && static_cast<double>(fixes[fixCursor].frame) < cp.clock) ++fixCursor;
+        sfCursor = 0;
+        while (sfCursor < sfBlobs.size() && static_cast<double>(sfBlobs[sfCursor].frame) < cp.clock) ++sfCursor;
     }
 
     inline void clearMacro() {
         macro.clear();
         fixes.clear();
         fixCursor = 0;
+        sfBlobs.clear();
+        sfCursor = 0;
         cursor = 0;
         ckpts.clear();
         cpInit = false;
@@ -492,7 +500,7 @@ namespace cky {
 
     inline bool save() {
         std::ostringstream f(std::ios::binary);
-        wr<uint32_t>(f, MAGIC5);
+        wr<uint32_t>(f, MAGIC6);
         wr<float>(f, macroTps);
         wr<uint32_t>(f, static_cast<uint32_t>(macro.size()));
         for (auto const& entry : macro) {
@@ -511,6 +519,18 @@ namespace cky {
                 wr<double>(f, e->dashX); wr<double>(f, e->dashY);
                 wr<double>(f, e->dashAngle); wr<double>(f, e->dashStart);
             }
+        }
+        wr<uint32_t>(f, ckySfLayoutHash());
+        wr<uint32_t>(f, static_cast<uint32_t>(sfBlobs.size()));
+        for (auto const& b : sfBlobs) {
+            wr<uint32_t>(f, b.frame);
+            wr<uint8_t>(f, b.dual);
+            wr<uint16_t>(f, b.n[0]);
+            wr<uint16_t>(f, b.n[1]);
+            for (int i = 0; i < 2; ++i) {
+                wr<float>(f, b.px[i]); wr<float>(f, b.py[i]); wr<float>(f, b.rot[i]);
+            }
+            f.write(reinterpret_cast<char const*>(b.bytes.data()), static_cast<std::streamsize>(b.bytes.size()));
         }
         if (!f.good()) return false;
         std::string raw = std::move(f).str();
@@ -577,7 +597,7 @@ namespace cky {
         uint32_t magic = 0, count = 0;
         float t = 240.f;
         if (!rd(f, magic)) return false;
-        if (magic == MAGIC2 || magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5) {
+        if (magic == MAGIC2 || magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5 || magic == MAGIC6) {
             if (!rd(f, t)) return false;
         } else if (magic != MAGIC1) {
             return false;
@@ -598,7 +618,7 @@ namespace cky {
             tmp.push_back({ fr, press != 0, btn });
         }
         std::vector<FrameFix> fx;
-        if (magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5) {
+        if (magic == MAGIC3 || magic == MAGIC4 || magic == MAGIC5 || magic == MAGIC6) {
             uint32_t fc = 0;
             if (!rd(f, fc) || fc > MAX_ENTRIES) return false;
             fx.reserve(fc);
@@ -607,9 +627,10 @@ namespace cky {
                 FrameFix x{};
                 if (!rd(f, x.frame) || !rd(f, x.x1) || !rd(f, x.y1) || !rd(f, x.r1)
                     || !rd(f, x.x2) || !rd(f, x.y2) || !rd(f, x.r2)) return false;
-                if ((magic == MAGIC4 || magic == MAGIC5) && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
-                x.hasVel = (magic == MAGIC4 || magic == MAGIC5);
-                if (magic == MAGIC5) {
+                bool v4 = (magic == MAGIC4 || magic == MAGIC5 || magic == MAGIC6);
+                if (v4 && (!rd(f, x.yv1) || !rd(f, x.yv2))) return false;
+                x.hasVel = v4;
+                if (magic == MAGIC5 || magic == MAGIC6) {
                     for (FixExtra* e : { &x.e1, &x.e2 }) {
                         if (!rd(f, e->flags) || !rd(f, e->dashX) || !rd(f, e->dashY)
                             || !rd(f, e->dashAngle) || !rd(f, e->dashStart)) return false;
@@ -621,8 +642,36 @@ namespace cky {
                 fx.push_back(x);
             }
         }
+        std::vector<CkySfBlob> sf;
+        if (magic == MAGIC6) {
+            uint32_t hash = 0, sc = 0;
+            if (!rd(f, hash) || !rd(f, sc) || sc > MAX_ENTRIES) return false;
+            bool useIt = (hash == ckySfLayoutHash());
+            uint32_t lastSf = 0;
+            for (uint32_t i = 0; i < sc; ++i) {
+                CkySfBlob b;
+                uint8_t dual = 0;
+                if (!rd(f, b.frame) || !rd(f, dual) || !rd(f, b.n[0]) || !rd(f, b.n[1])) return false;
+                if (b.n[0] > 8192 || b.n[1] > 8192) return false;
+                for (int k = 0; k < 2; ++k) {
+                    if (!rd(f, b.px[k]) || !rd(f, b.py[k]) || !rd(f, b.rot[k])) return false;
+                }
+                b.dual = dual;
+                b.bytes.resize(static_cast<size_t>(b.n[0]) + static_cast<size_t>(b.n[1]));
+                f.read(reinterpret_cast<char*>(b.bytes.data()), static_cast<std::streamsize>(b.bytes.size()));
+                if (!f) return false;
+                if (b.frame < lastSf) return false;
+                lastSf = b.frame;
+                if (useIt) sf.push_back(std::move(b));
+            }
+            if (!useIt && sc > 0) {
+                log::warn("[cky] macro has {} sub-frame snapshots from a different player layout, ignored", sc);
+            }
+        }
         macro = std::move(tmp);
         fixes = std::move(fx);
+        sfBlobs = std::move(sf);
+        sfCursor = 0;
         fixCursor = 0;
         macroTps = t;
         cursor = 0;
@@ -697,6 +746,9 @@ namespace cky {
             { "s-backstep", &backStepOn },
             { "s-back-always", &backAlways },
             { "s-delta-lock", &deltaLock },
+            { "s-sf", &sfOn },
+            { "s-sf-rec", &sfRecord },
+            { "s-sf-apply", &sfApply },
             { "lbl-cps", &clickHudOn },
             { "lbl-fps", &lblFps },
             { "lbl-nc-acc", &ncShowAcc },
@@ -724,6 +776,8 @@ namespace cky {
         static std::vector<IntSetting> const v = {
             { "s-fix-interval", &fixInterval, 1, 240 },
             { "s-back-depth", &backDepth, 30, 600 },
+            { "s-sf-depth", &sfDepth, 30, 960 },
+            { "s-sf-interval", &sfInterval, 1, 960 },
             { "s-traj-len", &trajLen, 60, 480 },
             { "s-frame-offset", &frameOffset, -10, 10 },
             { "s-slot", &slot, 1, MAX_SLOTS },
