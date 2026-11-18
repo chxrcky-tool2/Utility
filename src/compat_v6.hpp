@@ -6,9 +6,7 @@
 #include <asp/fs/std.hpp>
 
 namespace cky {
-    // Converts whatever path type Geode hands us (std::filesystem::path or asp::fs::Path)
-    // into a plain std::filesystem::path. In Geode 6, asp::fs::Path::toStdPath() returns a
-    // Result<std::filesystem::path, Error>, so the Result is unwrapped here.
+
     template <class P>
     inline std::filesystem::path stdPath(P const& p) {
         using Std = std::filesystem::path;
