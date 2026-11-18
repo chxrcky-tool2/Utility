@@ -13,6 +13,8 @@ struct CkySfBlob {
     float px[2] = { 0.f, 0.f };
     float py[2] = { 0.f, 0.f };
     float rot[2] = { 0.f, 0.f };
+    float lx[2] = { 0.f, 0.f };
+    float ly[2] = { 0.f, 0.f };
     std::vector<uint8_t> bytes;
 };
 

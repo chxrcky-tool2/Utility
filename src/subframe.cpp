@@ -1,10 +1,6 @@
 #include "state.hpp"
 #include <string_view>
 
-#define CKY_SF_EXTRA(X) \
-    X(m_lastPosition) \
-    X(m_xVelocity)
-
 namespace {
     constexpr size_t SF_MAX = 4096;
     constexpr size_t SF_MAX_BYTES = 24u * 1024u * 1024u;
@@ -28,6 +24,23 @@ namespace {
         else return true;
     }
 
+    template <class P>
+    void sfGetLast(P* p, float& x, float& y) {
+        x = 0.f;
+        y = 0.f;
+        if constexpr (requires { p->m_lastPosition.x; p->m_lastPosition.y; }) {
+            x = p->m_lastPosition.x;
+            y = p->m_lastPosition.y;
+        }
+    }
+
+    template <class P>
+    void sfSetLast(P* p, float x, float y) {
+        if constexpr (requires { p->m_lastPosition = cocos2d::CCPoint(x, y); }) {
+            p->m_lastPosition = cocos2d::CCPoint(x, y);
+        }
+    }
+
     template <bool Portable>
     bool sfPack(PlayerObject* p, uint8_t* out, size_t cap, size_t& n) {
         size_t off = 0;
@@ -46,7 +59,6 @@ namespace {
             } }
             CKY_TRAJ_FIELDS(CKY_SF_PACK)
             CKY_REAL_FIELDS(CKY_SF_PACK)
-            CKY_SF_EXTRA(CKY_SF_PACK)
 #undef CKY_SF_PACK
         };
         run(p);
@@ -70,7 +82,6 @@ namespace {
             } }
             CKY_TRAJ_FIELDS(CKY_SF_UNPACK)
             CKY_REAL_FIELDS(CKY_SF_UNPACK)
-            CKY_SF_EXTRA(CKY_SF_UNPACK)
 #undef CKY_SF_UNPACK
         };
         run(p);
@@ -89,7 +100,6 @@ namespace {
             } }
             CKY_TRAJ_FIELDS(CKY_SF_DIFF)
             CKY_REAL_FIELDS(CKY_SF_DIFF)
-            CKY_SF_EXTRA(CKY_SF_DIFF)
 #undef CKY_SF_DIFF
         };
         run(static_cast<PlayerObject*>(nullptr));
@@ -112,7 +122,6 @@ namespace {
             } }
             CKY_TRAJ_FIELDS(CKY_SF_HASH)
             CKY_REAL_FIELDS(CKY_SF_HASH)
-            CKY_SF_EXTRA(CKY_SF_HASH)
 #undef CKY_SF_HASH
         };
         run(static_cast<PlayerObject*>(nullptr));
@@ -127,6 +136,8 @@ namespace {
         float px[2] = { 0.f, 0.f };
         float py[2] = { 0.f, 0.f };
         float rot[2] = { 0.f, 0.f };
+        float lx[2] = { 0.f, 0.f };
+        float ly[2] = { 0.f, 0.f };
         float timeWarp = 1.f;
         float extraDelta = 0.f;
     };
@@ -214,9 +225,16 @@ namespace {
         return false;
     }
 
-    void applyPose(PlayerObject* p, float x, float y, float r) {
+    void applyPose(PlayerObject* p, float x, float y, float r, float lx, float ly) {
         p->setPosition(CCPoint(x, y));
         p->setRotation(r);
+        sfSetLast(p, lx, ly);
+    }
+
+    bool lastDiffers(PlayerObject* p, float lx, float ly) {
+        float x = 0.f, y = 0.f;
+        sfGetLast(p, x, y);
+        return x != lx || y != ly;
     }
 
     bool verifyAt(GJBaseGameLayer* l, uint32_t step, uint8_t phase, uint8_t sub, bool apply, char const* tag) {
@@ -230,7 +248,8 @@ namespace {
         bool bad1 = std::memcmp(g_scratch[0], d, g_per) != 0
             || l->m_player1->getPositionX() != s.px[0]
             || l->m_player1->getPositionY() != s.py[0]
-            || l->m_player1->getRotation() != s.rot[0];
+            || l->m_player1->getRotation() != s.rot[0]
+            || lastDiffers(l->m_player1, s.lx[0], s.ly[0]);
         bool useP2 = s.dual && l->m_gameState.m_isDualMode && l->m_player2 && !l->m_player2->m_isDead;
         bool bad2 = false;
         if (useP2) {
@@ -239,7 +258,8 @@ namespace {
                 bad2 = std::memcmp(g_scratch[1], d + g_per, g_per) != 0
                     || l->m_player2->getPositionX() != s.px[1]
                     || l->m_player2->getPositionY() != s.py[1]
-                    || l->m_player2->getRotation() != s.rot[1];
+                    || l->m_player2->getRotation() != s.rot[1]
+                    || lastDiffers(l->m_player2, s.lx[1], s.ly[1]);
             }
         }
         ++cky::sfRingChecks;
@@ -258,11 +278,11 @@ namespace {
         if (apply) {
             if (bad1) {
                 sfUnpack<false>(l->m_player1, d, g_per);
-                applyPose(l->m_player1, s.px[0], s.py[0], s.rot[0]);
+                applyPose(l->m_player1, s.px[0], s.py[0], s.rot[0], s.lx[0], s.ly[0]);
             }
             if (bad2) {
                 sfUnpack<false>(l->m_player2, d + g_per, g_per);
-                applyPose(l->m_player2, s.px[1], s.py[1], s.rot[1]);
+                applyPose(l->m_player2, s.px[1], s.py[1], s.rot[1], s.lx[1], s.ly[1]);
             }
         }
         return true;
@@ -346,10 +366,12 @@ void ckySfCapture(GJBaseGameLayer* l, CkySfPhase ph) {
     s.px[0] = p1->getPositionX();
     s.py[0] = p1->getPositionY();
     s.rot[0] = p1->getRotation();
+    sfGetLast(p1, s.lx[0], s.ly[0]);
     if (dual) {
         s.px[1] = l->m_player2->getPositionX();
         s.py[1] = l->m_player2->getPositionY();
         s.rot[1] = l->m_player2->getRotation();
+        sfGetLast(l->m_player2, s.lx[1], s.ly[1]);
     }
     s.timeWarp = l->m_gameState.m_timeWarp;
     s.extraDelta = l->m_extraDelta;
@@ -403,6 +425,7 @@ CkySfBlob ckySfMakeBlob(GJBaseGameLayer* l, uint32_t frame) {
     b.px[0] = l->m_player1->getPositionX();
     b.py[0] = l->m_player1->getPositionY();
     b.rot[0] = l->m_player1->getRotation();
+    sfGetLast(l->m_player1, b.lx[0], b.ly[0]);
     b.bytes.assign(g_scratch[0], g_scratch[0] + n1);
     if (dual) {
         b.dual = 1;
@@ -410,6 +433,7 @@ CkySfBlob ckySfMakeBlob(GJBaseGameLayer* l, uint32_t frame) {
         b.px[1] = l->m_player2->getPositionX();
         b.py[1] = l->m_player2->getPositionY();
         b.rot[1] = l->m_player2->getRotation();
+        sfGetLast(l->m_player2, b.lx[1], b.ly[1]);
         b.bytes.insert(b.bytes.end(), g_scratch[1], g_scratch[1] + n2);
     }
     return b;
@@ -433,7 +457,8 @@ bool ckySfApplyBlob(GJBaseGameLayer* l, CkySfBlob const& b) {
         bool same = std::memcmp(g_scratch[pi], data, n) == 0
             && p->getPositionX() == b.px[pi]
             && p->getPositionY() == b.py[pi]
-            && p->getRotation() == b.rot[pi];
+            && p->getRotation() == b.rot[pi]
+            && !lastDiffers(p, b.lx[pi], b.ly[pi]);
         if (same) return;
         if (!corrected) {
             firstField = sfFirstDiff<true>(g_scratch[pi], data, n);
@@ -441,7 +466,7 @@ bool ckySfApplyBlob(GJBaseGameLayer* l, CkySfBlob const& b) {
         }
         corrected = true;
         sfUnpack<true>(p, data, n);
-        applyPose(p, b.px[pi], b.py[pi], b.rot[pi]);
+        applyPose(p, b.px[pi], b.py[pi], b.rot[pi], b.lx[pi], b.ly[pi]);
     };
 
     one(l->m_player1, 0);

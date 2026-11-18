@@ -529,6 +529,7 @@ namespace cky {
             wr<uint16_t>(f, b.n[1]);
             for (int i = 0; i < 2; ++i) {
                 wr<float>(f, b.px[i]); wr<float>(f, b.py[i]); wr<float>(f, b.rot[i]);
+                wr<float>(f, b.lx[i]); wr<float>(f, b.ly[i]);
             }
             f.write(reinterpret_cast<char const*>(b.bytes.data()), static_cast<std::streamsize>(b.bytes.size()));
         }
@@ -655,6 +656,7 @@ namespace cky {
                 if (b.n[0] > 8192 || b.n[1] > 8192) return false;
                 for (int k = 0; k < 2; ++k) {
                     if (!rd(f, b.px[k]) || !rd(f, b.py[k]) || !rd(f, b.rot[k])) return false;
+                    if (!rd(f, b.lx[k]) || !rd(f, b.ly[k])) return false;
                 }
                 b.dual = dual;
                 b.bytes.resize(static_cast<size_t>(b.n[0]) + static_cast<size_t>(b.n[1]));
