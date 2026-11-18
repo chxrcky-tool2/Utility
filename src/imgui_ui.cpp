@@ -42,7 +42,7 @@ namespace {
         for (int i = 0; i < 8; ++i) o[i] = ImVec2(f[i][0], f[i][1]);
     }
 
-    ImU32 heatAt(float t /*0 top .. 1 bottom*/, float a) {
+    ImU32 heatAt(float t, float a) {
         return U(lerpf(0.85f, 1.00f, t), lerpf(0.20f, 0.62f, t), lerpf(0.05f, 0.14f, t), a);
     }
 
@@ -804,13 +804,6 @@ namespace {
             fxCheckbox("Fix velocity", &cky::fixVelocity);
         }
         {
-            bool sf = cky::sfOn;
-            if (fxCheckbox("Sub-frame snapshots", &sf)) {
-                cky::sfOn = sf;
-                if (!sf) ckySfClear(true);
-            }
-            fxCheckbox("Store snapshots in macros", &cky::sfRecord);
-            fxCheckbox("Apply snapshots on playback", &cky::sfApply);
             int si = cky::sfInterval;
             if (ImGui::SliderInt("Snapshot interval (steps)", &si, 1, 960)) cky::sfInterval = std::clamp(si, 1, 960);
             int sd = cky::sfDepth;
@@ -1203,7 +1196,7 @@ namespace {
         ImGui::TextDisabled("(c) 2026 ChxrCky - GNU GPL v3.0");
         ImGui::TextDisabled("Free software, NO WARRANTY.");
         if (fxButton("Open GPL-3.0 license")) {
-            web::openLinkInBrowser("https://www.gnu.org/licenses/gpl-3.0.html");
+            web::openLinkInBrowser("https:\057\057www.gnu.org/licenses/gpl-3.0.html");
         }
     }
 
