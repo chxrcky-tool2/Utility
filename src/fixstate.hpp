@@ -1,11 +1,4 @@
-// fixstate.hpp — small extra player state stored with every frame fix (CKY5 macros).
-//
-// A frame fix used to hold position, rotation and Y velocity. When a run drifts, those three can
-// match while the game's *state* still differs (on ground or not, dashing or not, jump buffered
-// or not), and the next step then goes a different way. This keeps a few of those flags plus the
-// dash numbers, so a drift is detected on the exact step it starts and corrected.
-//
-// Every member is optional: if this SDK has no such member it is simply skipped (compiles away).
+
 #pragma once
 #include <cstdint>
 #include <type_traits>
@@ -19,7 +12,7 @@ namespace cky {
     enum : uint8_t {
         FX_GROUND = 1, FX_UPSIDE = 2, FX_DASH = 4, FX_JBUF = 8, FX_SJBUF = 16, FX_SLOPE = 32
     };
-    // flags that count as "the state differs" when compared against a recording
+
     constexpr uint8_t FX_COMPARE = FX_GROUND | FX_UPSIDE | FX_DASH | FX_JBUF;
 
 #define CKY_FX_GETB(bit, f) if constexpr (requires { p->f; }) { if (p->f) e.flags |= (bit); }
@@ -45,10 +38,6 @@ namespace cky {
         return e;
     }
 
-    // Correction. Deliberately does NOT force m_isDashing / m_isUpsideDown / slope flags: setting
-    // those without the object they belong to (dash orb, slope) is unsafe, so a mismatch there is
-    // reported in the log instead. Ground + jump-buffer flags are safe to write. Dash numbers are
-    // only written while the player really is dashing in both the recording and the live game.
     template <class P>
     inline void applyExtra(P* p, FixExtra const& e) {
         if (!p) return;
@@ -65,7 +54,6 @@ namespace cky {
         }
     }
 
-    // which of the compared flags differ (0 = same state)
     inline uint8_t extraMismatch(FixExtra const& live, FixExtra const& rec) {
         return static_cast<uint8_t>((live.flags ^ rec.flags) & FX_COMPARE);
     }
@@ -75,4 +63,3 @@ namespace cky {
 #undef CKY_FX_SETD
 }
 
-// END OF FILE (fixstate.hpp)
