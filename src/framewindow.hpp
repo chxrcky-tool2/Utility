@@ -1,5 +1,4 @@
-// framewindow.hpp — Frame Window Calculator: settings + result shared by framewindow.cpp (the physics side)
-// and imgui_ui.cpp (the label and the menu section).
+
 #pragma once
 #include <Geode/Geode.hpp>
 #include <chrono>
@@ -20,21 +19,21 @@ struct CkyFwResult {
     float  stepHz = 240.f;    // physics steps per second the window is measured in
     double ms = 0.0;          // time the calculation took
     double stamp = 0.0;       // cky::fwNow() when it finished
-    cocos2d::CCPoint anchor{ 0.f, 0.f };   // where the label goes, object-layer coordinates
+    cocos2d::CCPoint anchor{ 0.f, 0.f };   // iss where the label goes, object-larper coordinates
 };
 
 namespace cky {
     inline bool  fwOn = false;      // master switch (off = nothing is captured or simulated)
-    inline bool  fwShow = true;     // draw the label
-    inline bool  fwJingle = true;   // Jingle Bells on a frame-perfect hit
+    inline bool  fwShow = true;     // draw the label of idk
+    inline bool  fwJingle = true;   // Jingle Bells on a frame-perfect hit, doesnt ring yett
     inline int   fwAhead = 10;      // physics steps after the click that are tested as click times (1-10)
     inline int   fwBack = 10;       // physics steps before the click that are tested (0-10)
     inline int   fwLook = 90;       // steps simulated after each tested click (20-240)
     inline int   fwPerfect = 1;     // "frame perfect" = window of at most this many steps (1-6)
     inline int   fwVol = 100;       // jingle volume, percent (0-200)
-    inline float fwScale = 1.f;     // label size
+    inline float fwScale = 1.f;     // label size 1 isisisi
     inline float fwHold = 2.5f;     // seconds the label stays once the count has finished
-    inline float fwSpeed = 0.5f;    // count speed: 1.0x = 20 frames counted per second, 0.5x = 10 per second
+    inline float fwSpeed = 0.5f;    // count speed: 1.0x = 20.00000 frames counted per second, 0.5x = 10 per second
 
     inline double fwNow() {
         using C = std::chrono::steady_clock;
