@@ -38,11 +38,7 @@ jobs:
           done
           ninja --version
 
-      # Attempt 1. combine: true makes the action upload this platform's
-      # build so the package job below can merge them into one .geode.
       - name: Build Mod
-        id: build1
-        continue-on-error: true
         uses: geode-sdk/build-geode-mod@main
         with:
           target: ${{ matrix.config.target }}
@@ -51,26 +47,19 @@ jobs:
           sdk: v6.0.0-alpha.2
           cli: latest
 
-      # Attempt 2: only if attempt 1 failed (transient network errors)
-    #  - name: Build Mod (retry)
-    #    if: steps.build1.outcome == 'failure'
-    #    uses: geode-sdk/build-geode-mod@main
-    #    with:
-   #       target: ${{ matrix.config.target }}
-    #      combine: true
-      #    use-cpm-cache: false
-      #    sdk: v6.0.0-alpha.2
-      #    cli: latest
-
   package:
     name: Package builds
     runs-on: ubuntu-latest
     needs: [ build ]
     steps:
-      - uses: geode-sdk/build-geode-mod/combine@main
+      - name: Combine Builds
+        uses: geode-sdk/build-geode-mod/combine@main
         id: combine
+        with:
+          sdk: v6.0.0-alpha.2
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: ChxrCky-Combined
           path: ${{ steps.combine.outputs.build-output }}
