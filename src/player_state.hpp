@@ -29,11 +29,11 @@ struct CkyPlayerState {
 };
 
 // member is usable: exists, plain data, default constructible and assignable (bit-fields included)
-#define CKY_PS_OK(f) requires { \
-    d->f; \
-    requires std::is_trivially_copyable_v<std::remove_cvref_t<decltype(d->f)>>; \
-    requires std::is_default_constructible_v<std::remove_cvref_t<decltype(d->f)>>; \
-    d->f = d->f; }
+#define CKY_PS_OK(f) requires (std::remove_pointer_t<decltype(d)>* ckyp) { \
+    ckyp->f; \
+    requires std::is_trivially_copyable_v<std::remove_cvref_t<decltype(ckyp->f)>>; \
+    requires std::is_default_constructible_v<std::remove_cvref_t<decltype(ckyp->f)>>; \
+    ckyp->f = ckyp->f; }
 
 namespace cky {
     template <class T>
