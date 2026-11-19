@@ -820,12 +820,31 @@ namespace {
             }
         }
         ImGui::SameLine();
+        static std::vector<cky::MacroEntry> s_picks;
         if (fxButton("Load macro")) {
-            if (!cky::macroNameOk()) {
-                ckyNotify("Type a macro name first", false);
-            } else {
-                bool ok = cky::load();
-                ckyNotify(ok ? fmt::format("Loaded {}", cky::macroFileName()).c_str() : "Load failed", ok);
+            s_picks = cky::listMacros();
+            ImGui::OpenPopup("Load macro##pick");
+        }
+        {
+            ImVec2 mid(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+            ImGui::SetNextWindowPos(mid, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+            if (ImGui::BeginPopupModal("Load macro##pick", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextUnformatted("Tap a saved macro to load it");
+                if (ImGui::BeginChild("##pickList", ImVec2(280.f, 220.f), true)) {
+                    if (s_picks.empty()) ImGui::TextDisabled("No saved macros yet");
+                    for (size_t i = 0; i < s_picks.size(); ++i) {
+                        ImGui::PushID(static_cast<int>(i));
+                        if (ImGui::Selectable(s_picks[i].display.c_str(), false, 0, ImVec2(0.f, 26.f))) {
+                            bool ok = cky::loadMacroEntry(s_picks[i]);
+                            ckyNotify(ok ? fmt::format("Loaded {}", s_picks[i].display).c_str() : "Load failed", ok);
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndChild();
+                if (fxButton("Cancel")) ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
             }
         }
 

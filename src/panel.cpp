@@ -78,6 +78,9 @@ namespace {
 
     enum : int { I_MACRO_NAME = 340 };
 
+    enum : int { B_PICK_BASE = 400, B_PICK_PREV = 420, B_PICK_NEXT, B_PICK_CLOSE };
+    constexpr int PICK_PER_PAGE = 6;
+
     enum : int { LBL_TAGS = 1000 };
 
     constexpr float ROW = 28.f;
@@ -465,6 +468,27 @@ namespace {
     };
 }
 
+namespace {
+    class CkyPickLayer : public CCLayer {
+    public:
+        static CkyPickLayer* create() {
+            auto r = new CkyPickLayer();
+            if (r && r->init()) { r->autorelease(); return r; }
+            CC_SAFE_DELETE(r);
+            return nullptr;
+        }
+        bool init() override {
+            if (!CCLayer::init()) return false;
+            this->setTouchEnabled(true);
+            return true;
+        }
+        void registerWithTouchDispatcher() override {
+            CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -800, true);
+        }
+        bool ccTouchBegan(CCTouch*, CCEvent*) override { return true; }
+    };
+}
+
 class CkyPanel : public CCNode {
     CCNode* m_host = nullptr;
     CCNode* m_content = nullptr;
@@ -479,6 +503,9 @@ class CkyPanel : public CCNode {
     int     m_tab = 0;
     bool    m_anim = false;
     std::vector<CCNode*> m_hidden;
+    CCNode* m_pick = nullptr;
+    std::vector<cky::MacroEntry> m_picks;
+    int     m_pickPage = 0;
     CCLabelBMFont* m_glLbl = nullptr;
     std::string    m_glOrig, m_glShown;
     int            m_glIdx = -1;
@@ -1290,7 +1317,114 @@ public:
             ? fmt::format("High TPS: {} (tap to cycle)", static_cast<int>(cky::tps))
             : std::string("High TPS: OFF (tap to cycle)"));
 }
+    void closePicker() {
+        if (m_pick) { m_pick->removeFromParent(); m_pick = nullptr; }
+    }
+
+    void openPicker() {
+        m_picks = cky::listMacros();
+        m_pickPage = 0;
+        buildPicker();
+    }
+
+    void buildPicker() {
+        closePicker();
+        auto layer = CkyPickLayer::create();
+        if (!layer) return;
+        m_pick = layer;
+        this->addChild(layer, 100);
+
+        constexpr float CW = 230.f, CH = 220.f;
+
+        auto dim = CCDrawNode::create();
+        CCPoint dv[4] = { {-400.f, -300.f}, {400.f, -300.f}, {400.f, 300.f}, {-400.f, 300.f} };
+        dim->drawPolygon(dv, 4, ccc4f(0.f, 0.f, 0.f, 0.55f), 0.f, ccc4f(0.f, 0.f, 0.f, 0.f));
+        layer->addChild(dim, 0);
+
+        auto border = CCScale9Sprite::create("square02_001.png");
+        border->setContentSize({CW + 4.f, CH + 4.f});
+        border->setColor(ccc3(0, 0, 0));
+        border->setOpacity(255);
+        layer->addChild(border, 1);
+
+        auto bg = CCScale9Sprite::create("square02_001.png");
+        bg->setContentSize({CW, CH});
+        bg->setColor(kCard);
+        bg->setOpacity(255);
+        layer->addChild(bg, 2);
+
+        auto edge = CCDrawNode::create();
+        CCPoint ev[4] = { {-CW / 2.f, -CH / 2.f}, {CW / 2.f, -CH / 2.f}, {CW / 2.f, CH / 2.f}, {-CW / 2.f, CH / 2.f} };
+        edge->drawPolygon(ev, 4, ccc4f(0.f, 0.f, 0.f, 0.f), 1.5f, pm3(kAccent, 1.f));
+        layer->addChild(edge, 3);
+
+        auto title = CCLabelBMFont::create("Load macro", "bigFont.fnt");
+        title->setScale(0.5f);
+        title->setColor(titleCol());
+        title->setPosition({0.f, CH / 2.f - 18.f});
+        layer->addChild(title, 4);
+
+        auto menu = CCMenu::create();
+        menu->setPosition({0.f, 0.f});
+        layer->addChild(menu, 5);
+
+        int total = static_cast<int>(m_picks.size());
+        int pages = std::max(1, (total + PICK_PER_PAGE - 1) / PICK_PER_PAGE);
+        m_pickPage = std::clamp(m_pickPage, 0, pages - 1);
+
+        if (total == 0) {
+            auto none = CCLabelBMFont::create("No saved macros yet", "bigFont.fnt");
+            none->setScale(0.38f);
+            none->setColor(labelCol());
+            none->setPosition({0.f, 10.f});
+            layer->addChild(none, 4);
+        } else {
+            for (int i = 0; i < PICK_PER_PAGE; ++i) {
+                int idx = m_pickPage * PICK_PER_PAGE + i;
+                if (idx >= total) break;
+                std::string name = m_picks[idx].display;
+                if (name.size() > 24) name = name.substr(0, 22) + "..";
+                makeBtn(menu, menu_selector(CkyPanel::onPick), B_PICK_BASE + i,
+                        0.f, CH / 2.f - 48.f - 25.f * static_cast<float>(i), 200.f, 21.f,
+                        name.c_str(), kBtn, 0.36f);
+            }
+        }
+
+        if (pages > 1) {
+            auto pg = CCLabelBMFont::create(fmt::format("Page {}/{}", m_pickPage + 1, pages).c_str(), "bigFont.fnt");
+            pg->setScale(0.3f);
+            pg->setColor(labelCol());
+            pg->setPosition({0.f, -CH / 2.f + 40.f});
+            layer->addChild(pg, 4);
+            makeBtn(menu, menu_selector(CkyPanel::onPick), B_PICK_PREV, -82.f, -CH / 2.f + 18.f, 56.f, 20.f, "Prev", kAccent, 0.35f);
+            makeBtn(menu, menu_selector(CkyPanel::onPick), B_PICK_NEXT,  82.f, -CH / 2.f + 18.f, 56.f, 20.f, "Next", kAccent, 0.35f);
+        }
+        makeBtn(menu, menu_selector(CkyPanel::onPick), B_PICK_CLOSE, 0.f, -CH / 2.f + 18.f, 72.f, 20.f, "Cancel", kBtn, 0.35f);
+
+        menu->setHandlerPriority(-810);
+    }
+
+    void onPick(CCObject* s) {
+        int t = static_cast<CCNode*>(s)->getTag();
+        if (t == B_PICK_CLOSE) { closePicker(); return; }
+        if (t == B_PICK_PREV)  { --m_pickPage; buildPicker(); return; }
+        if (t == B_PICK_NEXT)  { ++m_pickPage; buildPicker(); return; }
+        int idx = m_pickPage * PICK_PER_PAGE + (t - B_PICK_BASE);
+        if (t < B_PICK_BASE || idx < 0 || idx >= static_cast<int>(m_picks.size())) return;
+
+        cky::MacroEntry e = m_picks[idx];
+        bool ok = cky::loadMacroEntry(e);
+        closePicker();
+        if (m_rows) {
+            if (auto in = typeinfo_cast<TextInput*>(m_rows->getChildByTag(I_MACRO_NAME))) {
+                in->setString(cky::macroName, false);
+            }
+        }
+        ckyNotify(ok ? fmt::format("Loaded {}", e.display).c_str() : "Load failed", ok);
+    }
+
     void onTab(CCObject* s) {
+        closePicker();
         buildTab(static_cast<CCNode*>(s)->getTag() - TAB_BASE);
     }
 
@@ -1517,13 +1651,9 @@ public:
             ckyNotify(ok ? fmt::format("Saved {}", cky::macroFileName()).c_str() : "Save failed", ok);
             break;
         }
-        case B_LOAD: {
-            syncMacroName();
-            if (!cky::macroNameOk()) { ckyNotify("Type a macro name first", false); break; }
-            bool ok = cky::load();
-            ckyNotify(ok ? fmt::format("Loaded {}", cky::macroFileName()).c_str() : "Load failed", ok);
+        case B_LOAD:
+            openPicker();
             break;
-        }
         case B_CLEAR:
             cky::clearMacro();
             ckyNotify("Macro buffer cleared");

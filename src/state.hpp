@@ -566,8 +566,7 @@ namespace cky {
         return !ec;
     }
 
-    inline bool load() {
-        auto p = slotFind();
+    inline bool loadFile(std::filesystem::path const& p) {
         if (p.empty()) return false;
 
         std::string bytes;
@@ -677,6 +676,58 @@ namespace cky {
         fixCursor = 0;
         macroTps = t;
         cursor = 0;
+        return true;
+    }
+
+    inline bool load() {
+        return loadFile(slotFind());
+    }
+
+    struct MacroEntry {
+        std::filesystem::path path;
+        std::string stem;
+        std::string display;
+        std::filesystem::file_time_type time{};
+    };
+
+    inline std::vector<MacroEntry> listMacros() {
+        std::vector<MacroEntry> out;
+        std::set<std::string> seen;
+        auto scan = [&](std::filesystem::path const& dir) {
+            std::error_code ec;
+            if (!std::filesystem::is_directory(dir, ec) || ec) return;
+            for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+                std::error_code e2;
+                if (!it->is_regular_file(e2) || e2) continue;
+                std::filesystem::path const& fp = it->path();
+                std::string ext = fp.extension().string();
+                bool known = false;
+                for (auto const& d : kThemeDefs) { if (ext == d.ext) { known = true; break; } }
+                if (!known) continue;
+                if (!seen.insert(fp.string()).second) continue;
+                auto tm = std::filesystem::last_write_time(fp, e2);
+                if (e2) tm = std::filesystem::file_time_type{};
+                std::string st = fp.stem().string();
+                out.push_back({ fp, st, st, tm });
+            }
+        };
+        for (int i = 0; i < ThemeCount; ++i) scan(themeMacroDir(i));
+        scan(macroDir());
+        std::sort(out.begin(), out.end(), [](MacroEntry const& a, MacroEntry const& b) {
+            if (a.time != b.time) return a.time > b.time;
+            return a.display < b.display;
+        });
+        std::map<std::string, int> count;
+        for (auto const& e : out) ++count[e.stem];
+        for (auto& e : out) {
+            if (count[e.stem] > 1) e.display = e.stem + e.path.extension().string();
+        }
+        return out;
+    }
+
+    inline bool loadMacroEntry(MacroEntry const& e) {
+        if (!loadFile(e.path)) return false;
+        setMacroName(e.stem);
         return true;
     }
 }
