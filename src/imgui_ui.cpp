@@ -8,9 +8,14 @@
 #include "fx.hpp"
 #include "render/ChxrRender.hpp"
 
+#if defined(CKY_IMGUI_ENABLED) && !__has_include(<imgui-cocos.hpp>)
+#error "CKY_IMGUI is ON but imgui-cocos.hpp was not found. Check the matcool/gd-imgui-cocos CPMAddPackage block in CMakeLists.txt."
+#endif
+
 #if __has_include(<imgui-cocos.hpp>)
 
 #include <imgui-cocos.hpp>
+#include <Geode/modify/CCTouchDispatcher.hpp>
 #include <Geode/utils/web.hpp>
 #include <cstdlib>
 #include <cfloat>
@@ -765,16 +770,52 @@ namespace {
     ImVec2 g_winPos(0.f, 0.f), g_winSize(0.f, 0.f);
     bool   g_anyPopup = false;
 
+    ImVec2 touchToIm(CCTouch* t) {
+        ImVec2 ds = ImGui::GetIO().DisplaySize;
+        CCSize win = CCDirector::get()->getWinSize();
+        CCPoint p = t->getLocation();
+        if (win.width <= 0.f || win.height <= 0.f) return ImVec2(0.f, 0.f);
+        return ImVec2(p.x * ds.x / win.width, (win.height - p.y) * ds.y / win.height);
+    }
+
+    bool overMenu(ImVec2 q) {
+        bool inWin = q.x >= g_winPos.x && q.x <= g_winPos.x + g_winSize.x &&
+                     q.y >= g_winPos.y && q.y <= g_winPos.y + g_winSize.y;
+        return inWin || g_anyPopup;
+    }
+
+    CCTouch* g_hookTouch = nullptr;
+
+    bool hookFeed(CCSet* set, unsigned int type) {
+        if (!set || !cky::imguiOpen || !ImGui::GetCurrentContext()) return false;
+        ImGuiIO& io = ImGui::GetIO();
+        bool took = false;
+        for (auto it = set->begin(); it != set->end(); ++it) {
+            auto t = static_cast<CCTouch*>(*it);
+            if (!t) continue;
+            ImVec2 q = touchToIm(t);
+            if (type == CCTOUCHBEGAN) {
+                if (g_hookTouch || !overMenu(q)) continue;
+                g_hookTouch = t;
+                io.AddMousePosEvent(q.x, q.y);
+                io.AddMouseButtonEvent(0, true);
+                took = true;
+            } else if (t == g_hookTouch) {
+                io.AddMousePosEvent(q.x, q.y);
+                if (type == CCTOUCHENDED || type == CCTOUCHCANCELLED) {
+                    io.AddMouseButtonEvent(0, false);
+                    g_hookTouch = nullptr;
+                }
+                took = true;
+            }
+        }
+        return took;
+    }
+
     class ImTouch : public CCLayer {
         CCTouch* m_active = nullptr;
 
-        static ImVec2 toIm(CCTouch* t) {
-            ImVec2 ds = ImGui::GetIO().DisplaySize;
-            CCSize win = CCDirector::get()->getWinSize();
-            CCPoint p = t->getLocation();
-            if (win.width <= 0.f || win.height <= 0.f) return ImVec2(0.f, 0.f);
-            return ImVec2(p.x * ds.x / win.width, (win.height - p.y) * ds.y / win.height);
-        }
+        static ImVec2 toIm(CCTouch* t) { return touchToIm(t); }
 
         void finish(CCTouch* t) {
             if (t != m_active) return;
@@ -807,9 +848,7 @@ namespace {
         bool ccTouchBegan(CCTouch* t, CCEvent*) override {
             if (m_active || !cky::imguiOpen || !ImGui::GetCurrentContext()) return false;
             ImVec2 q = toIm(t);
-            bool inWin = q.x >= g_winPos.x && q.x <= g_winPos.x + g_winSize.x &&
-                         q.y >= g_winPos.y && q.y <= g_winPos.y + g_winSize.y;
-            if (!inWin && !g_anyPopup) return false;
+            if (!overMenu(q)) return false;
             m_active = t;
             ImGuiIO& io = ImGui::GetIO();
             io.AddMousePosEvent(q.x, q.y);
@@ -1487,6 +1526,13 @@ namespace {
         if (!open) cky::imguiOpen = false;
     }
 }
+
+class $modify(CkyTouchDispatcher, CCTouchDispatcher) {
+    void touches(CCSet* touches, CCEvent* event, unsigned int type) {
+        if (hookFeed(touches, type)) return;
+        CCTouchDispatcher::touches(touches, event, type);
+    }
+};
 
 $on_mod(Loaded) {
     if (!wantsImGui()) return;
