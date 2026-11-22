@@ -9,13 +9,12 @@
   "developer": "ChxrCky",
   "description": "Lightweight .cky macro recorder/player.",
   "tags": ["cheat", "utility", "interface"],
-  "dependencies": [
-  {
-    "id": "geode.node-ids",
+"dependencies": {
+  "geode.node-ids": {
     "version": ">=v1.24.0-beta.1",
     "importance": "suggested"
   }
-],
+},
   "settings": {
     "ui-mode": {
       "name": "Menu style",
