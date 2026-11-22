@@ -1,3 +1,9 @@
+#if __has_include(<imgui-cocos.hpp>) && __has_include(<imgui_internal.h>)
+#include <imgui.h>
+#include <imgui_internal.h>
+#define CKY_HAS_IMGUI_INTERNAL 1
+#endif
+
 #include "state.hpp"
 #include "fx.hpp"
 #include "render/ChxrRender.hpp"
@@ -8,10 +14,6 @@
 #include <Geode/utils/web.hpp>
 #include <cstdlib>
 #include <cfloat>
-#if __has_include(<imgui_internal.h>)
-#include <imgui_internal.h>
-#define CKY_HAS_IMGUI_INTERNAL 1
-#endif
 
 namespace {
     bool g_ready = false;
