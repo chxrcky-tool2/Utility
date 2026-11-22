@@ -26,8 +26,14 @@ if (CKY_GDR)
 endif()
 
 if (CKY_IMGUI)
-    CPMAddPackage("gh:matcool/gd-imgui-cocos#geode")
+    CPMAddPackage(
+        NAME gd-imgui-cocos
+        GITHUB_REPOSITORY matcool/gd-imgui-cocos
+        GIT_TAG geode
+    )
+    message(STATUS "imgui-cocos (matcool/gd-imgui-cocos, geode) source: ${gd-imgui-cocos_SOURCE_DIR}")
     target_link_libraries(${PROJECT_NAME} imgui-cocos)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE CKY_IMGUI_ENABLED=1)
 endif()
 
 CPMAddPackage(
