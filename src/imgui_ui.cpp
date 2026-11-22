@@ -246,6 +246,8 @@ namespace {
     void dragScroll() {
         if (!ImGui::IsMouseDown(0)) return;
         ImGuiIO& io = ImGui::GetIO();
+        if (ImGui::GetScrollMaxY() <= 0.f) return;
+        if (ImGui::GetMousePos().y < ImGui::GetWindowPos().y + ImGui::GetFrameHeight()) return;
         if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) return;
         ImGuiID wid = ImGui::GetCurrentWindow()->ID;
         if (g_dragMode == 0) {
@@ -276,6 +278,19 @@ namespace {
     std::vector<Rect4> g_rectsBuild;
     bool g_anyPopup = false;
 
+    struct IconCircle { bool valid = false; float cx = 0.f, cy = 0.f, r = 0.f; };
+    IconCircle g_icon;
+    bool  g_closing = false, g_snapBack = false, g_touchDbg = false;
+    float g_closeT = 0.f;
+    float g_startX = 10.f;
+    constexpr float kCloseSecs = 0.42f;
+    ImVec2 g_home[8];
+    bool   g_homeOk[8] = {};
+
+    void startClose() {
+        if (cky::imguiOpen && !g_closing) { g_closing = true; g_closeT = 0.f; }
+    }
+
     ImVec2 touchToIm(CCTouch* t) {
         ImVec2 ds = ImGui::GetIO().DisplaySize;
         CCSize win = CCDirector::get()->getWinSize();
@@ -285,6 +300,11 @@ namespace {
     }
 
     bool overMenu(ImVec2 q) {
+        if (g_closing) return false;
+        if (g_icon.valid) {
+            float dx = q.x - g_icon.cx, dy = q.y - g_icon.cy;
+            if (dx * dx + dy * dy <= g_icon.r * g_icon.r) return false;
+        }
         if (g_anyPopup) return true;
         for (auto const& r : g_rects)
             if (q.x >= r.x0 && q.x <= r.x1 && q.y >= r.y0 && q.y <= r.y1) return true;
@@ -302,7 +322,9 @@ namespace {
             if (!t) continue;
             ImVec2 q = touchToIm(t);
             if (type == CCTOUCHBEGAN) {
-                if (g_hookTouch || !overMenu(q)) continue;
+                bool over = overMenu(q);
+                if (g_touchDbg) geode::log::debug("[cky] touch {:.0f},{:.0f} overMenu={} windows={} closing={}", q.x, q.y, over, g_rects.size(), g_closing);
+                if (g_hookTouch || !over) continue;
                 g_hookTouch = t;
                 io.AddMousePosEvent(q.x, q.y);
                 io.AddMouseButtonEvent(0, true);
@@ -878,7 +900,8 @@ namespace {
         }
 
         ImGui::Separator();
-        if (mhButton("Hide menu")) cky::imguiOpen = false;
+        if (mhButton("Hide menu")) startClose();
+        mhToggle("Touch debug", &g_touchDbg);
 
         ImGui::Separator();
         ImGui::Text("ChxrCky Macro Bot v1.0.6-beta.5");
@@ -985,13 +1008,30 @@ namespace {
         }
     }
 
+    int scatterDir(float dx, float dy, int slot) {
+        if (std::fabs(dx) < 1.f && std::fabs(dy) < 1.f) return slot & 7;
+        float ang = std::atan2(dy, dx);
+        return (static_cast<int>(std::lround(ang / 0.78539816f)) + 8) & 7;
+    }
+
     void mhWindow(char const* title, int slot, float width, ImVec2 disp, void (*body)()) {
         constexpr float kMargin = 10.f, kGap = 8.f;
-        int perRow = std::max(1, static_cast<int>((disp.x - kMargin) / (width + kGap)));
+        int s = slot & 7;
+        int perRow = std::max(1, static_cast<int>((disp.x - g_startX) / (width + kGap)));
         int col = slot % perRow, row = slot / perRow;
-        ImGui::SetNextWindowPos(ImVec2(kMargin + static_cast<float>(col) * (width + kGap),
+        ImGui::SetNextWindowPos(ImVec2(g_startX + static_cast<float>(col) * (width + kGap),
                                        kMargin + static_cast<float>(row) * std::max(disp.y * 0.46f, 120.f)),
                                 ImGuiCond_FirstUseEver);
+        if (g_snapBack && g_homeOk[s]) ImGui::SetNextWindowPos(g_home[s], ImGuiCond_Always);
+        if (g_closing && g_homeOk[s]) {
+            static float const DX[8] = { 1.f, 0.7071f, 0.f, -0.7071f, -1.f, -0.7071f, 0.f, 0.7071f };
+            static float const DY[8] = { 0.f, 0.7071f, 1.f, 0.7071f, 0.f, -0.7071f, -1.f, -0.7071f };
+            float e = std::clamp(g_closeT / kCloseSecs, 0.f, 1.f);
+            float dist = std::max(disp.x, disp.y) * 1.6f * e * e;
+            int d = scatterDir(g_home[s].x + width * 0.5f - disp.x * 0.5f, g_home[s].y + 90.f - disp.y * 0.5f, slot);
+            ImGui::SetNextWindowPos(ImVec2(g_home[s].x + DX[d] * dist, g_home[s].y + DY[d] * dist), ImGuiCond_Always);
+        }
+
         static float need[16] = {};
         float maxH = std::max(120.f, disp.y * 0.88f);
         ImGui::SetNextWindowSize(ImVec2(width, need[slot & 15] > maxH ? maxH : 0.f), ImGuiCond_Always);
@@ -999,6 +1039,7 @@ namespace {
         bool visible = ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoResize);
         ImVec2 wp = ImGui::GetWindowPos(), ws = ImGui::GetWindowSize();
         g_rectsBuild.push_back({ wp.x, wp.y, wp.x + ws.x, wp.y + ws.y });
+        if (!g_closing) { g_home[s] = wp; g_homeOk[s] = true; }
 
         {
             float th = ImGui::GetFrameHeight();
@@ -1019,6 +1060,43 @@ namespace {
         ImGui::End();
     }
 
+    void updateIcon(ImVec2 disp) {
+        g_icon.valid = false;
+        auto scene = CCDirector::get()->getRunningScene();
+        if (!scene) return;
+        auto ic = scene->getChildByIDRecursive("cky-icon");
+        if (!ic || !ic->getParent() || !ic->isVisible()) return;
+        CCSize win = CCDirector::get()->getWinSize();
+        if (win.width <= 0.f || win.height <= 0.f) return;
+        CCNode* par = ic->getParent();
+        CCPoint w0 = par->convertToWorldSpace(ic->getPosition());
+        CCPoint w1 = par->convertToWorldSpace(CCPoint(ic->getPositionX() + 22.f * ic->getScale(), ic->getPositionY()));
+        float sx = disp.x / win.width, sy = disp.y / win.height;
+        g_icon.valid = true;
+        g_icon.cx = w0.x * sx;
+        g_icon.cy = (win.height - w0.y) * sy;
+        g_icon.r = std::max(8.f, std::fabs(w1.x - w0.x) * sx);
+    }
+
+    void drawIconMarker() {
+        if (!g_icon.valid) return;
+        bool covered = false;
+        for (auto const& r : g_rects) {
+            float nx = std::clamp(g_icon.cx, r.x0, r.x1), ny = std::clamp(g_icon.cy, r.y0, r.y1);
+            float dx = g_icon.cx - nx, dy = g_icon.cy - ny;
+            if (dx * dx + dy * dy < g_icon.r * g_icon.r) { covered = true; break; }
+        }
+        if (!covered) return;
+        ImDrawList* fg = ImGui::GetForegroundDrawList();
+        ImVec2 c(g_icon.cx, g_icon.cy);
+        fg->AddCircleFilled(c, g_icon.r, U(0.05f, 0.05f, 0.07f, 0.96f), 32);
+        fg->AddCircle(c, g_icon.r, U(g_accent, 1.f), 32, 2.5f);
+        ImFont* font = ImGui::GetFont();
+        float fs = g_icon.r * 0.75f;
+        ImVec2 ts = font->CalcTextSizeA(fs, FLT_MAX, 0.f, "CKY");
+        fg->AddText(font, fs, ImVec2(c.x - ts.x * 0.5f, c.y - ts.y * 0.5f), U(1.f, 1.f, 1.f, 1.f), "CKY");
+    }
+
     void drawMenu() {
         touchBridgeRegister();
         dragScrollFrame();
@@ -1027,12 +1105,18 @@ namespace {
         if (!cky::imguiOpen) {
             g_rects.clear();
             g_anyPopup = false;
+            g_icon.valid = false;
             return;
         }
 
         ImVec2 disp = ImGui::GetIO().DisplaySize;
+        updateIcon(disp);
+        g_startX = 10.f;
+        if (g_icon.valid && g_icon.cx < disp.x * 0.3f && g_icon.cy < disp.y * 0.4f)
+            g_startX = g_icon.cx + g_icon.r + 12.f;
+
         float width = std::clamp(disp.x * 0.16f, 290.f, 380.f);
-        width = std::min(width, std::max(200.f, disp.x - 20.f));
+        width = std::min(width, std::max(200.f, disp.x - g_startX - 10.f));
 
         mhWindow("Bot",              0, width, disp, winBot);
         mhWindow("Global",           1, width, disp, winGlobal);
@@ -1042,9 +1126,32 @@ namespace {
         mhWindow("Clicks",           5, width, disp, winClicks);
         mhWindow("Rendering (Beta)", 6, width, disp, winRendering);
         mhWindow("Settings",         7, width, disp, winSettings);
+        g_snapBack = false;
 
-        g_anyPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+        g_anyPopup = !g_closing && ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
         g_rects = g_rectsBuild;
+        drawIconMarker();
+
+        if (g_touchDbg) {
+            ImGuiIO& io = ImGui::GetIO();
+            ImDrawList* fg = ImGui::GetForegroundDrawList();
+            fg->AddCircle(io.MousePos, 14.f, U(1.f, 1.f, 0.f, 1.f), 16, 2.f);
+            char buf[160];
+            std::snprintf(buf, sizeof buf, "mouse %.0f,%.0f down=%d wantMouse=%d windows=%d closing=%d",
+                          io.MousePos.x, io.MousePos.y, io.MouseDown[0] ? 1 : 0, io.WantCaptureMouse ? 1 : 0,
+                          static_cast<int>(g_rects.size()), g_closing ? 1 : 0);
+            fg->AddText(ImVec2(disp.x * 0.5f - 200.f, disp.y - 30.f), U(1.f, 1.f, 0.f, 1.f), buf);
+        }
+
+        if (g_closing) {
+            g_closeT += std::min(ImGui::GetIO().DeltaTime, 0.05f);
+            if (g_closeT >= kCloseSecs) {
+                g_closing = false;
+                g_snapBack = true;
+                cky::imguiOpen = false;
+                g_rects.clear();
+            }
+        }
 
         cky::settingsSaveIfChanged();
         ckyHudRefresh();
@@ -1066,7 +1173,11 @@ $on_mod(Loaded) {
 }
 
 bool ckyUiIsImGui() { return g_ready; }
-void ckyImGuiToggle() { cky::imguiOpen = !cky::imguiOpen; }
+void ckyImGuiToggle() {
+    if (g_closing) return;
+    if (cky::imguiOpen) startClose();
+    else cky::imguiOpen = true;
+}
 
 #else
 
