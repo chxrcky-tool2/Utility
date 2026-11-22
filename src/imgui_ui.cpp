@@ -8,6 +8,10 @@
 #include <Geode/utils/web.hpp>
 #include <cstdlib>
 #include <cfloat>
+#if __has_include(<imgui_internal.h>)
+#include <imgui_internal.h>
+#define CKY_HAS_IMGUI_INTERNAL 1
+#endif
 
 namespace {
     bool g_ready = false;
@@ -720,7 +724,45 @@ namespace {
         st.PopupRounding = fr;
     }
 
+#ifdef CKY_HAS_IMGUI_INTERNAL
+    int    g_dragMode = 0;
+    ImGuiID g_dragOwner = 0;
+
+    void dragScrollFrame() {
+        if (ImGui::IsMouseClicked(0) || !ImGui::IsMouseDown(0)) { g_dragMode = 0; g_dragOwner = 0; }
+    }
+
+    void dragScroll() {
+        if (!ImGui::IsMouseDown(0)) return;
+        ImGuiIO& io = ImGui::GetIO();
+        if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) return;
+        ImGuiID wid = ImGui::GetCurrentWindow()->ID;
+        if (g_dragMode == 0) {
+            if (!ImGui::IsMouseDragging(0, 10.f)) return;
+            ImVec2 d = ImGui::GetMouseDragDelta(0, 0.f);
+            if (std::fabs(d.y) >= std::fabs(d.x) * 1.5f) {
+                g_dragMode = 1;
+                g_dragOwner = wid;
+                ImGui::ClearActiveID();
+            } else {
+                g_dragMode = 2;
+            }
+            return;
+        }
+        if (g_dragMode != 1 || g_dragOwner != wid) return;
+        float maxY = ImGui::GetScrollMaxY();
+        if (maxY <= 0.f) return;
+        ImGui::SetScrollY(std::clamp(ImGui::GetScrollY() - io.MouseDelta.y, 0.f, maxY));
+    }
+
+#else
+    void dragScrollFrame() {}
+    void dragScroll() {}
+#endif
+
     void styleSetup() {
+        ImGui::GetIO().IniFilename = nullptr;
+        ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
         ImGui::GetStyle() = ImGuiStyle();
         ImGui::StyleColorsDark();
         auto& s = ImGui::GetStyle();
@@ -841,6 +883,7 @@ namespace {
                         }
                         ImGui::PopID();
                     }
+                    dragScroll();
                 }
                 ImGui::EndChild();
                 if (fxButton("Cancel")) ImGui::CloseCurrentPopup();
@@ -1211,7 +1254,7 @@ namespace {
         }
 
         ImGui::Separator();
-        ImGui::Text("ChxrCky Macro Bot v1.0.6-beta.2");
+        ImGui::Text("ChxrCky Macro Bot v1.0.6-beta.5");
         ImGui::TextDisabled("(c) 2026 ChxrCky - GNU GPL v3.0");
         ImGui::TextDisabled("Free software, NO WARRANTY.");
         if (fxButton("Open GPL-3.0 license")) {
@@ -1316,6 +1359,7 @@ namespace {
     }
 
     void drawMenu() {
+        dragScrollFrame();
         drawFrameWindow();
         if (!cky::imguiOpen) return;
 
@@ -1324,12 +1368,14 @@ namespace {
             ImVec2(std::min(disp.x * 0.85f, 1100.f), std::min(disp.y * 0.85f, 700.f)),
             ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(ImVec2(disp.x * 0.5f, disp.y * 0.5f),
-            ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+            ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
 
         ImGui::SetNextWindowSizeConstraints(ImVec2(std::min(460.f, disp.x), std::min(320.f, disp.y)), disp);
 
         bool open = true;
-        ImGuiWindowFlags flags = curKind() != Kind::None ? ImGuiWindowFlags_NoBackground : 0;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+        if (curKind() != Kind::None) flags |= ImGuiWindowFlags_NoBackground;
         if (ImGui::Begin("ChxrCky Macro Bot", &open, flags)) {
             ImVec2 fxPos = ImGui::GetWindowPos(), fxSize = ImGui::GetWindowSize();
             fxBegin(fxPos, fxSize);
@@ -1344,6 +1390,7 @@ namespace {
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();
             }
+            dragScroll();
             fxTextShadowForTheme(fxPos, fxSize);
             fxEnd(fxPos, fxSize);
         }

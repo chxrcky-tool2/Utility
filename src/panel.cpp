@@ -1193,7 +1193,7 @@ public:
             rowWide("Reset icon position", B_RESETPOS);
             rowPill("Checkpoint telemetry", T_TELEM);
             rowValue("Theme", B_THEME_DN, B_THEME_UP, L_THEME);
-            rowText("ChxrCky Macro Bot v1.0.6-beta.2");
+            rowText("ChxrCky Macro Bot v1.0.6-beta.5");
             rowText("(c) 2026 ChxrCky - GNU GPL v3.0");
             rowText("Free software: you may redistribute and");
             rowText("modify it under the terms of the GPL-3.0.");
