@@ -45,3 +45,5 @@ Join our Discord server to report bugs, suggest features, or just chat with othe
 that's all
 
 Free hosted website 👉 **[Here](https://chxrcky-tool2.github.io/)**
+
+I sometimes Upload via files, it's a thing I do, so ignore it if u can, thanks.
