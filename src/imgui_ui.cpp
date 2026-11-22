@@ -762,6 +762,62 @@ namespace {
     void dragScroll() {}
 #endif
 
+    ImVec2 g_winPos(0.f, 0.f), g_winSize(0.f, 0.f);
+    bool   g_anyPopup = false;
+
+    class ImTouch : public CCObject, public CCTouchDelegate {
+        CCTouch* m_active = nullptr;
+
+        static ImVec2 toIm(CCTouch* t) {
+            ImVec2 ds = ImGui::GetIO().DisplaySize;
+            CCSize win = CCDirector::get()->getWinSize();
+            CCPoint p = t->getLocation();
+            if (win.width <= 0.f || win.height <= 0.f) return ImVec2(0.f, 0.f);
+            return ImVec2(p.x * ds.x / win.width, (win.height - p.y) * ds.y / win.height);
+        }
+
+        void finish(CCTouch* t) {
+            if (t != m_active) return;
+            m_active = nullptr;
+            if (!ImGui::GetCurrentContext()) return;
+            ImGuiIO& io = ImGui::GetIO();
+            ImVec2 q = toIm(t);
+            io.AddMousePosEvent(q.x, q.y);
+            io.AddMouseButtonEvent(0, false);
+        }
+
+    public:
+        bool ccTouchBegan(CCTouch* t, CCEvent*) override {
+            if (m_active || !cky::imguiOpen || !ImGui::GetCurrentContext()) return false;
+            ImVec2 q = toIm(t);
+            bool inWin = q.x >= g_winPos.x && q.x <= g_winPos.x + g_winSize.x &&
+                         q.y >= g_winPos.y && q.y <= g_winPos.y + g_winSize.y;
+            if (!inWin && !g_anyPopup) return false;
+            m_active = t;
+            ImGuiIO& io = ImGui::GetIO();
+            io.AddMousePosEvent(q.x, q.y);
+            io.AddMouseButtonEvent(0, true);
+            return true;
+        }
+
+        void ccTouchMoved(CCTouch* t, CCEvent*) override {
+            if (t != m_active || !ImGui::GetCurrentContext()) return;
+            ImVec2 q = toIm(t);
+            ImGui::GetIO().AddMousePosEvent(q.x, q.y);
+        }
+
+        void ccTouchEnded(CCTouch* t, CCEvent*) override { finish(t); }
+        void ccTouchCancelled(CCTouch* t, CCEvent*) override { finish(t); }
+    };
+
+    void touchBridgeRegister() {
+        static bool done = false;
+        if (done) return;
+        done = true;
+        auto d = new ImTouch();
+        CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(d, -100000, true);
+    }
+
     void styleSetup() {
         ImGui::GetIO().IniFilename = nullptr;
         ImGui::GetIO().ConfigWindowsMoveFromTitleBarOnly = true;
@@ -1361,6 +1417,7 @@ namespace {
     }
 
     void drawMenu() {
+        touchBridgeRegister();
         dragScrollFrame();
         drawFrameWindow();
         if (!cky::imguiOpen) return;
@@ -1380,6 +1437,8 @@ namespace {
         if (curKind() != Kind::None) flags |= ImGuiWindowFlags_NoBackground;
         if (ImGui::Begin("ChxrCky Macro Bot", &open, flags)) {
             ImVec2 fxPos = ImGui::GetWindowPos(), fxSize = ImGui::GetWindowSize();
+            g_winPos = fxPos;
+            g_winSize = fxSize;
             fxBegin(fxPos, fxSize);
             if (ImGui::BeginTabBar("cky-tabs")) {
                 if (ImGui::BeginTabItem("Bot"))      { tabBot();      ImGui::EndTabItem(); }
@@ -1392,6 +1451,7 @@ namespace {
                 if (ImGui::BeginTabItem("Settings")) { tabSettings(); ImGui::EndTabItem(); }
                 ImGui::EndTabBar();
             }
+            g_anyPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
             dragScroll();
             fxTextShadowForTheme(fxPos, fxSize);
             fxEnd(fxPos, fxSize);
