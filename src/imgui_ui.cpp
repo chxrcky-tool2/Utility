@@ -765,26 +765,7 @@ namespace {
     ImVec2 g_winPos(0.f, 0.f), g_winSize(0.f, 0.f);
     bool   g_anyPopup = false;
 
-    int g_dbgReg = 0, g_dbgRaw = 0, g_dbgBegan = 0, g_dbgMoved = 0, g_dbgEnded = 0, g_dbgIn = -1;
-    ImVec2 g_dbgLast(0.f, 0.f);
-
-    void dbgOverlay() {
-        ImGuiIO& io = ImGui::GetIO();
-        char b[512];
-        std::snprintf(b, sizeof b,
-            "touch dbg\nreg %d raw %d began %d moved %d ended %d inWin %d\nlast %.0f,%.0f mouse %.0f,%.0f down %d\nwantMouse %d hov %d act %d popup %d\ndisp %.0fx%.0f win %.0f,%.0f %.0fx%.0f",
-            g_dbgReg, g_dbgRaw, g_dbgBegan, g_dbgMoved, g_dbgEnded, g_dbgIn,
-            g_dbgLast.x, g_dbgLast.y, io.MousePos.x, io.MousePos.y, io.MouseDown[0] ? 1 : 0,
-            io.WantCaptureMouse ? 1 : 0, ImGui::IsAnyItemHovered() ? 1 : 0, ImGui::IsAnyItemActive() ? 1 : 0, g_anyPopup ? 1 : 0,
-            io.DisplaySize.x, io.DisplaySize.y, g_winPos.x, g_winPos.y, g_winSize.x, g_winSize.y);
-        ImDrawList* fg = ImGui::GetForegroundDrawList();
-        ImVec2 ts = ImGui::CalcTextSize(b);
-        ImVec2 o(60.f, 40.f);
-        fg->AddRectFilled(o, ImVec2(o.x + ts.x + 12.f, o.y + ts.y + 12.f), IM_COL32(0, 0, 0, 220));
-        fg->AddText(ImVec2(o.x + 6.f, o.y + 6.f), IM_COL32(255, 255, 0, 255), b);
-    }
-
-    class ImTouch : public CCObject, public CCTouchDelegate {
+    class ImTouch : public CCLayer {
         CCTouch* m_active = nullptr;
 
         static ImVec2 toIm(CCTouch* t) {
@@ -797,7 +778,6 @@ namespace {
 
         void finish(CCTouch* t) {
             if (t != m_active) return;
-            ++g_dbgEnded;
             m_active = nullptr;
             if (!ImGui::GetCurrentContext()) return;
             ImGuiIO& io = ImGui::GetIO();
@@ -807,16 +787,29 @@ namespace {
         }
 
     public:
+        static ImTouch* create() {
+            auto r = new ImTouch();
+            if (r && r->init()) { r->autorelease(); return r; }
+            CC_SAFE_DELETE(r);
+            return nullptr;
+        }
+
+        bool init() override {
+            if (!CCLayer::init()) return false;
+            this->setTouchEnabled(true);
+            return true;
+        }
+
+        void registerWithTouchDispatcher() override {
+            CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(this, -2000, true);
+        }
+
         bool ccTouchBegan(CCTouch* t, CCEvent*) override {
-            ++g_dbgRaw;
             if (m_active || !cky::imguiOpen || !ImGui::GetCurrentContext()) return false;
             ImVec2 q = toIm(t);
-            g_dbgLast = q;
             bool inWin = q.x >= g_winPos.x && q.x <= g_winPos.x + g_winSize.x &&
                          q.y >= g_winPos.y && q.y <= g_winPos.y + g_winSize.y;
-            g_dbgIn = inWin ? 1 : 0;
             if (!inWin && !g_anyPopup) return false;
-            ++g_dbgBegan;
             m_active = t;
             ImGuiIO& io = ImGui::GetIO();
             io.AddMousePosEvent(q.x, q.y);
@@ -826,9 +819,7 @@ namespace {
 
         void ccTouchMoved(CCTouch* t, CCEvent*) override {
             if (t != m_active || !ImGui::GetCurrentContext()) return;
-            ++g_dbgMoved;
             ImVec2 q = toIm(t);
-            g_dbgLast = q;
             ImGui::GetIO().AddMousePosEvent(q.x, q.y);
         }
 
@@ -836,13 +827,20 @@ namespace {
         void ccTouchCancelled(CCTouch* t, CCEvent*) override { finish(t); }
     };
 
+    ImTouch* g_touchLayer = nullptr;
+
     void touchBridgeRegister() {
-        static bool done = false;
-        if (done) return;
-        done = true;
-        g_dbgReg = 1;
-        auto d = new ImTouch();
-        CCDirector::get()->getTouchDispatcher()->addTargetedDelegate(d, -100000, true);
+        if (!cky::imguiOpen) return;
+        CCScene* scene = CCDirector::get()->getRunningScene();
+        if (!scene) return;
+        if (!g_touchLayer) {
+            g_touchLayer = ImTouch::create();
+            if (!g_touchLayer) return;
+            g_touchLayer->retain();
+        }
+        if (g_touchLayer->getParent() == scene) return;
+        g_touchLayer->removeFromParentAndCleanup(false);
+        scene->addChild(g_touchLayer, 2147483000);
     }
 
     void styleSetup() {
@@ -1448,7 +1446,6 @@ namespace {
         dragScrollFrame();
         drawFrameWindow();
         if (!cky::imguiOpen) return;
-        dbgOverlay();
 
         ImVec2 disp = ImGui::GetIO().DisplaySize;
         ImGui::SetNextWindowSize(
