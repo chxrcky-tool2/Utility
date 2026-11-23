@@ -1,3 +1,5 @@
+Repository will be ignored until I will do it again.
+
 # ChxrCky
 ---
 ## Core engine:
@@ -16,6 +18,7 @@ While playing or practicing a level, you can adjust the speed, so you can practi
 
 **Frame Stepper:**
 Makes the player stops at a specific frame, and can step frame by frame
+
 ---
 ## Features:
 ---
@@ -31,7 +34,7 @@ Draws the player's hitboxes left behind every step. Length and colors (outer/inn
 Shows the buttons for speed changer, & you can adjust the speed in game.
 
 
-
+---
 
 ⚠️ Soft warning ⚠️ 
 This utility is, and can ban you from geometry dash leaderboard stats. Use offline, or use it on a copy of a level.
